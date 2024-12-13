@@ -6,12 +6,15 @@ import plotly.express as px
 from pathlib import Path
 import time
 import threading
+import os
 
-# Percorso del file HTML
+
+# Percorsi dei file
 output_path = Path(__file__).parent / 'live_waveform_and_trigger_plot.html'
+output_txt = Path(__file__).parent / 'saved_waveforms.txt'
 
 # Soglia di trigger (in Volt)
-THRESHOLD = 0.05  # Valore arbitrario, da adattare alle esigenze
+THRESHOLD = 0.5  # Valore arbitrario, da adattare alle esigenze
 
 # Flask App
 app = Flask(__name__)
@@ -34,10 +37,23 @@ def generate_html_plot(data, output_path):
         y='Amplitude (V)',
         color='n_channel',
         markers=True,
-        facet_row='n_event',  # Mostra waveform e trigger separatamente per ogni evento
+        facet_row='n_event',
     )
     fig.write_html(output_path, include_plotlyjs='cdn')
     print(f"Plot updated and saved to {output_path}")
+
+# Funzione per salvare le waveform buone in un file
+def save_waveforms_to_txt(data, filename):
+    """Salva le waveform sopra soglia in un file di testo (Time, Amplitude)."""
+    absolute_path = os.path.abspath(filename)
+    with open(absolute_path, 'a') as f:
+        for event, group in data.groupby(level='n_event'):
+            f.write(f"Event {event}:\n")
+            reordered_group = group[['Time (s)', 'Amplitude (V)']]
+            f.write(reordered_group.to_string(index=False, header=False))
+            f.write("\n\n")
+    print(f"Waveforms saved to {absolute_path}")
+
 
 # Funzione per acquisire e plottare dati live
 def data_acquisition_and_plot(digitizer):
@@ -55,18 +71,24 @@ def data_acquisition_and_plot(digitizer):
             # Converti i dati in DataFrame
             data = convert_dicitonaries_to_data_frame(waveforms)
 
-            # Filtra i dati per CH0 e il trigger (esempio: `trigger_group_1`)
+            # Filtra i dati per CH0
             ch0_data = data.loc[(slice(None), 'CH0'), :]
-            trigger_data = data.loc[(slice(None), 'trigger_group_1'), :]
 
-            # Applica il filtro per la soglia a CH0 (solo se necessario)
+            # Applica il filtro per la soglia
             ch0_data_above_threshold = ch0_data[ch0_data['Amplitude (V)'] > THRESHOLD]
 
-            # Combina waveform e trigger in un unico DataFrame
-            combined_data = pd.concat([ch0_data, trigger_data])
+            if not ch0_data_above_threshold.empty:
+                # Salva gli eventi con waveform sopra soglia
+                save_waveforms_to_txt(ch0_data_above_threshold, './waveforms_above_threshold.txt')
+
+            # Combina waveform e trigger (facoltativo) per il plot
+            # Combina waveform sopra soglia e trigger per il plot
+            trigger_data = data.loc[(slice(None), 'trigger_group_1'), :]
+            combined_data = pd.concat([ch0_data_above_threshold, trigger_data])
 
             # Genera il file HTML per il grafico live
             generate_html_plot(combined_data, output_path)
+
 
             # Aspetta prima del prossimo aggiornamento
             time.sleep(1)
