@@ -36,7 +36,7 @@ fi
 AC_PREREQ(2.50)
 AC_INIT(wavedump, [WD_VERSION], support.computing@caen.it)
 AC_CONFIG_AUX_DIR([src])
-AM_INIT_AUTOMAKE(wavedump, [WD_VERSION])
+AM_INIT_AUTOMAKE(foreign silent-rules)
 AC_CONFIG_SRCDIR([include/WaveDump.h])
 #AC_CONFIG_HEADER([config.h])
 

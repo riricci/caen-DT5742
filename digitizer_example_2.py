@@ -10,7 +10,7 @@ if __name__ == '__main__':
 	print('Connected with:',d.idn)
 
 	configure_digitizer(d)
-	d.set_max_num_events_BLT(3) # Override the maximum number of events to be stored in the digitizer's self buffer.
+	d.set_max_num_events_BLT(4) # Override the maximum number of events to be stored in the digitizer's self buffer.
 
 	# Data acquisition ---
 	with d:

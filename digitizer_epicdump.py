@@ -8,7 +8,10 @@ import time
 import threading
 
 # Percorso del file HTML
-output_path = Path(__file__).parent / 'live_plot.html'
+output_path = Path(__file__).parent / 'live_waveform_and_trigger_plot.html'
+
+# Soglia di trigger (in Volt)
+THRESHOLD = 0.05  # Valore arbitrario, da adattare alle esigenze
 
 # Flask App
 app = Flask(__name__)
@@ -23,54 +26,62 @@ def serve_plot():
 
 # Funzione per generare il plot HTML
 def generate_html_plot(data, output_path):
-    # Crea il grafico con Plotly Express
+    """Genera il grafico e lo salva come HTML."""
     fig = px.line(
-        title='CAEN Digitizer Live Plot',
+        title='CAEN Digitizer Waveform and Trigger',
         data_frame=data.reset_index(),
         x='Time (s)',
         y='Amplitude (V)',
         color='n_channel',
-        facet_row='n_event',
         markers=True,
+        facet_row='n_event',  # Mostra waveform e trigger separatamente per ogni evento
     )
     fig.write_html(output_path, include_plotlyjs='cdn')
     print(f"Plot updated and saved to {output_path}")
-    
-# Funzione per acquisire dati e aggiornare il plot
-def data_acquisition_loop(digitizer):
+
+# Funzione per acquisire e plottare dati live
+def data_acquisition_and_plot(digitizer):
     while True:
         try:
-            print("Acquiring data from digitizer...")
+            print("Acquiring one waveform from digitizer...")
             with digitizer:
-                time.sleep(1)  # Aspetta per acquisire eventi
+                time.sleep(0.5)  # Aspetta per garantire l'acquisizione
                 waveforms = digitizer.get_waveforms()
 
-            if len(waveforms) == 0:
-                print("WARNING: No waveforms acquired.")
+            if not waveforms:
+                print("WARNING: No waveform acquired. Retrying...")
                 continue
 
             # Converti i dati in DataFrame
             data = convert_dicitonaries_to_data_frame(waveforms)
 
-            # Genera il file HTML
-            generate_html_plot(data, output_path)
+            # Filtra i dati per CH0 e il trigger (esempio: `trigger_group_1`)
+            ch0_data = data.loc[(slice(None), 'CH0'), :]
+            trigger_data = data.loc[(slice(None), 'trigger_group_1'), :]
+
+            # Applica il filtro per la soglia a CH0 (solo se necessario)
+            ch0_data_above_threshold = ch0_data[ch0_data['Amplitude (V)'] > THRESHOLD]
+
+            # Combina waveform e trigger in un unico DataFrame
+            combined_data = pd.concat([ch0_data, trigger_data])
+
+            # Genera il file HTML per il grafico live
+            generate_html_plot(combined_data, output_path)
 
             # Aspetta prima del prossimo aggiornamento
-            print("Waiting 5 seconds before next update...")
-            time.sleep(5)
+            time.sleep(1)
 
         except Exception as e:
-            print(f"Error during data acquisition: {e}")
+            print(f"Error during data acquisition or plotting: {e}")
 
 if __name__ == '__main__':
     # Configura il digitizer
     digitizer = CAEN_DT5742_Digitizer(LinkNum=0)
     print('Connected with:', digitizer.idn)
     configure_digitizer(digitizer)
-    digitizer.set_max_num_events_BLT(3)
 
-    # Avvia il thread per l'acquisizione dei dati
-    acquisition_thread = threading.Thread(target=data_acquisition_loop, args=(digitizer,))
+    # Avvia il thread per l'acquisizione dei dati e aggiornamento del plot
+    acquisition_thread = threading.Thread(target=data_acquisition_and_plot, args=(digitizer,))
     acquisition_thread.daemon = True
     acquisition_thread.start()
 
