@@ -14,7 +14,7 @@ output_path = Path(__file__).parent / 'live_waveform_and_trigger_plot.html'
 output_txt = Path(__file__).parent / 'saved_waveforms.txt'
 
 # Soglia di trigger (in Volt)
-THRESHOLD = 0.5  # Valore arbitrario, da adattare alle esigenze
+THRESHOLD = 0.001  # Valore arbitrario, da adattare alle esigenze
 
 # Flask App
 app = Flask(__name__)
