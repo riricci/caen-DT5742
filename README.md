@@ -3,6 +3,11 @@ Installation guide for CAEN digitizer DT5742B.
 For now, drivers available at: 
 git clone https://gitlab.cern.ch/riricci/caen-dt.git (private repository, contact Riccardo to have full access)
 
+It is possible to install all at once (i.e. installation steps from 2 to 5) by typing: 
+
+    ```
+    sudo ./install.sh
+    ```
 
 1. **Requirements**:
   - *UEFI Secure boot* has to be disabled (can be done from system bios)
