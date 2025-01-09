@@ -1,5 +1,11 @@
 #!/bin/bash -e
 
+# activating environment for Python 
+echo "Creating a Python virtual environment..."
+python3 -m venv myenv
+echo "Activating the virtual environment..."
+source myenv/bin/activate
+
 # installing dependencies
 echo "installing CAENUSBdrvB. Progressing..."
 cd dependencies/CAENUSBdrvB-v1.6.0/
@@ -26,3 +32,7 @@ echo "installing CAENDigitizer library. Progressing..."
 cd ../../../digitizerDT5742/CAENDigitizer-v2.17.3/lib/
 sh install_x64
 echo "  CAENDigitizer library installed successfully!"
+
+echo "installing CAENDigitizer python library. Progressing..."
+cd ../../../
+pip install git+https://github.com/SengerM/CAENpy 
