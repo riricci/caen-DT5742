@@ -7,32 +7,33 @@ echo "Activating the virtual environment..."
 source myenv/bin/activate
 
 # installing dependencies
-echo "installing CAENUSBdrvB. Progressing..."
+echo -e "\033[34minstalling CAENUSBdrvB. Progressing...\033[0m"
 cd dependencies/CAENUSBdrvB-v1.6.0/
 ./install.sh
-echo "  CAENUSBdrvB installed successfully!"
+echo -e "\033[32m  CAENUSBdrvB installed successfully!\033[0m"
 
-echo "installing CAENVMELib. Progressing..."
+echo -e "\033[34minstalling CAENVMELib. Progressing...\033[0m"
 cd ../../dependencies/CAENVMELib-v4.0.2/lib/
 sh install_x64
-echo "  CAENVMELib installed successfully!"
+echo -e "\033[32m  CAENVMELib installed successfully!\033[0m"
 
-echo "installing CAENComm. Progressing..."
+echo -e "\033[34minstalling CAENComm. Progressing...\033[0m"
 cd ../../../dependencies/CAENComm-v1.7.0/lib/
 sh install_x64
-echo "  CAENComm installed successfully!"
+echo -e "\033[32m  CAENComm installed successfully!\033[0m"
 
 # installing CAEN digitizer libraries
-echo "installing CAENComm. Progressing..."
+echo -e "\033[34minstalling CAENComm. Progressing...\033[0m"
 cd ../../../dependencies/CAENComm-v1.7.0/lib/
 sh install_x64
-echo "  CAENComm installed successfully!"
+echo -e "\033[32m  CAENComm installed successfully!\033[0m"
 
-echo "installing CAENDigitizer library. Progressing..."
+echo -e "\033[34minstalling CAENDigitizer library. Progressing...\033[0m"
 cd ../../../digitizerDT5742/CAENDigitizer-v2.17.3/lib/
 sh install_x64
-echo "  CAENDigitizer library installed successfully!"
+echo -e "\033[32m  CAENDigitizer library installed successfully!\033[0m"
 
-echo "installing CAENDigitizer python library. Progressing..."
+echo -e "\033[34minstalling CAENDigitizer python library. Progressing...\033[0m"
 cd ../../../
-pip install git+https://github.com/SengerM/CAENpy 
+pip install git+https://github.com/SengerM/CAENpy
+echo -e "\033[32m  CAENpy library installed successfully!\033[0m"
