@@ -9,7 +9,7 @@ import os
 import time
 import threading
 
-# Configurazione iniziale
+# Initial Configuration
 THRESHOLD = -0.05
 DATA_DIR = Path(__file__).parent / "data"
 OUTPUT_HTML = DATA_DIR / "live_waveform_plot.html"
@@ -17,7 +17,7 @@ OUTPUT_TXT = DATA_DIR / "waveforms.txt"
 OUTPUT_ROOT = DATA_DIR / "waveforms.root"
 STOP_ACQUISITION = False
 
-# Assicurati che la cartella per i dati esista
+# Ensure the data folder exists
 DATA_DIR.mkdir(exist_ok=True)
 
 # Flask App
@@ -25,28 +25,28 @@ app = Flask(__name__)
 
 @app.route('/')
 def serve_plot():
-    """Serve il file HTML del plot."""
+    """Serve the HTML file of the plot."""
     if OUTPUT_HTML.exists():
         return send_file(OUTPUT_HTML, mimetype='text/html')
     return "Plot not generated yet. Please wait and refresh.", 404
 
 @app.route('/stop')
 def stop_acquisition():
-    """Arresta in sicurezza l'acquisizione dati."""
+    """Safely stop data acquisition."""
     global STOP_ACQUISITION
     STOP_ACQUISITION = True
     return "Data acquisition stopped.", 200
 
-# Funzioni per salvataggio ed elaborazione dati
+# Functions for saving and processing data
 def save_waveforms_to_txt(data, filename):
-    """Salva i dati in formato TXT con un nome di evento unico."""
+    """Save data in TXT format with a unique event name."""
     if data.empty:
         print("WARNING: No data to save to TXT.")
         return
 
-    with open(filename, 'a') as f:  # 'a' per appendere i nuovi dati
+    with open(filename, 'a') as f:  # 'a' to append new data
         for event, group in data.groupby(level='n_event'):
-            # Scrivi l'evento con il suo numero
+            # Write the event with its number
             f.write(f"# Event {event}\n")
             reordered_group = group[['Time (s)', 'Amplitude (V)']]
             reordered_group.to_csv(f, index=False, header=True, sep='\t')
@@ -54,24 +54,24 @@ def save_waveforms_to_txt(data, filename):
     print(f"Waveforms saved to TXT file: {filename}")
 
 def save_waveforms_to_root(data, filename):
-    """Salva i dati in formato ROOT, separati per evento."""
+    """Save data in ROOT format, separated by event."""
     if data.empty:
         print("WARNING: No data to save to ROOT.")
         return
 
     with uproot.recreate(filename) as root_file:
-        for event, group in data.groupby('n_event'):  # Usa direttamente 'n_event' come chiave
+        for event, group in data.groupby('n_event'):  # Use 'n_event' directly as key
             tree_data = {
                 "Time_s": group["Time (s)"].to_numpy(),
                 "Amplitude_V": group["Amplitude (V)"].to_numpy()
             }
 
-            # Salva i dati sotto un evento unico
+            # Save data under a unique event
             root_file[f"Event_{event}"] = tree_data
     print(f"Waveforms saved to ROOT file: {filename}")
 
 def generate_html_plot(data, output_path):
-    """Genera un grafico interattivo e lo salva in formato HTML."""
+    """Generate an interactive plot and save it in HTML format."""
     fig = px.line(
         title='CAEN Digitizer Waveform and Trigger',
         data_frame=data.reset_index(),
@@ -84,7 +84,7 @@ def generate_html_plot(data, output_path):
     fig.write_html(output_path, include_plotlyjs='cdn')
     print(f"Plot saved to {output_path}")
 
-# Funzione di acquisizione dati
+# Data acquisition function
 def data_acquisition_and_processing(digitizer):
     global STOP_ACQUISITION
     n_events = 0
@@ -99,28 +99,28 @@ def data_acquisition_and_processing(digitizer):
                 print("WARNING: No waveforms acquired. Retrying...")
                 continue
 
-            # Converti i dati in DataFrame
+            # Convert data into DataFrame
             data = convert_dicitonaries_to_data_frame(waveforms)
 
-            # Filtra solo i dati del canale CH0
+            # Filter only the data from channel CH0
             ch0_data = data.loc[(slice(None), 'CH0'), :]
 
-            # Applica filtro per il threshold
+            # Apply threshold filter
             ch0_data_above_threshold = ch0_data[ch0_data['Amplitude (V)'] > THRESHOLD]
 
             if not ch0_data_above_threshold.empty:
-                # Salva i dati filtrati in formato TXT e ROOT
+                # Save the filtered data in TXT and ROOT formats
                 save_waveforms_to_txt(ch0_data_above_threshold, OUTPUT_TXT)
                 save_waveforms_to_root(ch0_data_above_threshold, OUTPUT_ROOT)
 
-            # Combina dati del canale CH0 e trigger per il grafico
+            # Combine CH0 data and trigger data for the plot
             trigger_data = data.loc[(slice(None), 'trigger_group_1'), :]
             combined_data = pd.concat([ch0_data_above_threshold, trigger_data])
 
-            # Genera grafico HTML
+            # Generate HTML plot
             generate_html_plot(combined_data, OUTPUT_HTML)
 
-            # Incrementa il contatore eventi
+            # Increment event counter
             n_events += len(waveforms)
             print(f"Processed {n_events} events.")
 
@@ -129,16 +129,16 @@ def data_acquisition_and_processing(digitizer):
 
 # Main Script
 if __name__ == '__main__':
-    # Configura il digitizer
+    # Configure the digitizer
     digitizer = CAEN_DT5742_Digitizer(LinkNum=0)
     print('Connected with:', digitizer.idn)
     configure_digitizer(digitizer)
 
-    # Avvia thread per acquisizione dati
+    # Start the data acquisition thread
     acquisition_thread = threading.Thread(target=data_acquisition_and_processing, args=(digitizer,))
     acquisition_thread.daemon = True
     acquisition_thread.start()
 
-    # Avvia il server Flask
+    # Start the Flask server
     print("Starting Flask server...")
     app.run(host='0.0.0.0', port=8050)
