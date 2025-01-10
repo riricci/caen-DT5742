@@ -22,7 +22,7 @@ cd ../../../dependencies/CAENComm-v1.7.0/lib/
 sudo sh install_x64
 echo -e "\033[32m  CAENComm installed successfully!\033[0m"
 
-pip install plotly flask pandas 
+pip install plotly flask pandas pyroot uproot
 
 
 # installing CAEN digitizer libraries
