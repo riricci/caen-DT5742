@@ -1,0 +1,5 @@
+# Ignora tutte le cartelle __pycache__ e i file .pyc
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
