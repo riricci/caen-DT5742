@@ -21,30 +21,30 @@ the script will ask for sudo privileges.
     sudo apt install libusb-1.0-0-dev
     ```
 	
-	CAEN USB Driver installation. From caen-dt:
+- CAEN USB Driver installation. From caen-dt:
     ```
 	cd dependencies/CAENUSBdrvB-v1.6.0/
 	sudo ./install.sh
     ```
 
-	- CAENVME library installation (needed also if not using VME communication). From caen-dt:
+- CAENVME library installation (needed also if not using VME communication). From caen-dt:
     ```
     cd dependencies/CAENVMELib-v4.0.2/lib/
     sudo sudo sh install_x64 # or _x32 _arm64 depending on your system.
     ```
-	    Now you should see the libraries in /usr/lib. You can check the installation by typing: 
+	Now you should see the libraries in /usr/lib. You can check the installation by typing: 
         ```
 	    	ls /usr/lib | grep libCAENVME
         ldconfig -p | grep CAENVME
         ```
 
         
-  - CAENComm library installation. From caen-dt:
+- CAENComm library installation. From caen-dt:
     ```
     cd dependencies/CAENVMELib-v4.0.2/lib/
     sudo sudo sh install_x64 # or _x32 _arm64 depending on your system.
     ```
-	    Now you should see the libraries in /usr/lib. You can check the installation by typing: 
+	Now you should see the libraries in /usr/lib. You can check the installation by typing: 
         ```
 		    ls /usr/lib | grep libCAENComm.so
         ldconfig -p | grep libCAENComm.so
@@ -57,7 +57,7 @@ the script will ask for sudo privileges.
     cd digitizerDT5742/lib/
     sudo sudo sh install_x64 # or _x32 _arm64 depending on your system.
     ```
-	    Now you should see the libraries in /usr/lib. You can check the installation by typing: 
+	Now you should see the libraries in /usr/lib. You can check the installation by typing: 
         ```
 		  ls /usr/lib | grep CAENDigitizer.so
       ldconfig -p | grep CAENDigitizer.so
