@@ -6,8 +6,9 @@ git clone https://gitlab.cern.ch/riricci/caen-dt.git (private repository, contac
 It is possible to install all at once (i.e. installation steps from 2 to 5) by typing: 
 
 ```
-sudo ./install.sh
+source ./install.sh
 ```
+the script will ask for sudo privileges.
 
 1. **Requirements**:
   - *UEFI Secure boot* has to be disabled (can be done from system bios)
