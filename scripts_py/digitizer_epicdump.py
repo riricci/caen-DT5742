@@ -8,13 +8,18 @@ import time
 import threading
 import os
 
+# still developing. 
 
-# Percorsi dei file
+# missing a STOP ACQUISITION function to safely end the data taking!! To be done.
+# the basic configuration of the digitizer relays on digitizer_example_1 and 2.py. 
+# See the function configure_digitizer in digitizer_example_1.py for details.
+
+# Live plot file path
 output_path = Path(__file__).parent / 'live_waveform_and_trigger_plot.html'
 output_txt = Path(__file__).parent / 'saved_waveforms.txt'
 
-# Soglia di trigger (in Volt)
-THRESHOLD = 0.001  # Valore arbitrario, da adattare alle esigenze
+# signal threshold (still absolute...to be fixed)
+THRESHOLD = -0.05  
 
 # Flask App
 app = Flask(__name__)
@@ -27,7 +32,7 @@ def serve_plot():
     else:
         return "Plot not generated yet. Please wait a moment and refresh the page.", 404
 
-# Funzione per generare il plot HTML
+# function to generate html plot
 def generate_html_plot(data, output_path):
     """Genera il grafico e lo salva come HTML."""
     fig = px.line(
@@ -42,9 +47,9 @@ def generate_html_plot(data, output_path):
     fig.write_html(output_path, include_plotlyjs='cdn')
     print(f"Plot updated and saved to {output_path}")
 
-# Funzione per salvare le waveform buone in un file
+# Function to save waveform to txt file (to be studied)
 def save_waveforms_to_txt(data, filename):
-    """Salva le waveform sopra soglia in un file di testo (Time, Amplitude)."""
+    """Saving waveform to txt file (Time, Amplitude)."""
     absolute_path = os.path.abspath(filename)
     with open(absolute_path, 'a') as f:
         for event, group in data.groupby(level='n_event'):
@@ -52,10 +57,10 @@ def save_waveforms_to_txt(data, filename):
             reordered_group = group[['Time (s)', 'Amplitude (V)']]
             f.write(reordered_group.to_string(index=False, header=False))
             f.write("\n\n")
-    print(f"Waveforms saved to {absolute_path}")
+    print(f"Waveforms saved to {absolute_path}") # not printing yet. to be fixed.
 
 
-# Funzione per acquisire e plottare dati live
+# Function to acquire and plot live data
 def data_acquisition_and_plot(digitizer):
     while True:
         try:
@@ -68,45 +73,45 @@ def data_acquisition_and_plot(digitizer):
                 print("WARNING: No waveform acquired. Retrying...")
                 continue
 
-            # Converti i dati in DataFrame
+            # Data conversion to pandas data frames --> evaluate migration to ROOTDataFrames
             data = convert_dicitonaries_to_data_frame(waveforms)
 
-            # Filtra i dati per CH0
+            # Considerind only data from CHO
             ch0_data = data.loc[(slice(None), 'CH0'), :]
 
-            # Applica il filtro per la soglia
+            # Filtering for threshold
             ch0_data_above_threshold = ch0_data[ch0_data['Amplitude (V)'] > THRESHOLD]
 
             if not ch0_data_above_threshold.empty:
-                # Salva gli eventi con waveform sopra soglia
+                # Saving only events above threshold
                 save_waveforms_to_txt(ch0_data_above_threshold, './waveforms_above_threshold.txt')
 
-            # Combina waveform e trigger (facoltativo) per il plot
-            # Combina waveform sopra soglia e trigger per il plot
+            # Combining waveform and trigger (optional) for the plot
+            # Combining waveform (above thr) and trigger for the plot
             trigger_data = data.loc[(slice(None), 'trigger_group_1'), :]
             combined_data = pd.concat([ch0_data_above_threshold, trigger_data])
 
-            # Genera il file HTML per il grafico live
+            # Generating html file for live plotting
             generate_html_plot(combined_data, output_path)
 
 
-            # Aspetta prima del prossimo aggiornamento
+            # Waiting before next updat
             time.sleep(1)
 
         except Exception as e:
             print(f"Error during data acquisition or plotting: {e}")
 
 if __name__ == '__main__':
-    # Configura il digitizer
+    # Configuring digitizer
     digitizer = CAEN_DT5742_Digitizer(LinkNum=0)
     print('Connected with:', digitizer.idn)
     configure_digitizer(digitizer)
 
-    # Avvia il thread per l'acquisizione dei dati e aggiornamento del plot
+    # Srarting thread for data acquisition and live plotting
     acquisition_thread = threading.Thread(target=data_acquisition_and_plot, args=(digitizer,))
     acquisition_thread.daemon = True
     acquisition_thread.start()
 
-    # Avvia il server Flask
+    # Starting flask server
     print("Starting Flask server...")
     app.run(host='0.0.0.0', port=8050)
