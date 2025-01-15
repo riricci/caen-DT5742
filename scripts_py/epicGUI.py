@@ -140,8 +140,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.container)
 
     def start_acquisition(self):
-        global STOP_ACQUISITION
+        global STOP_ACQUISITION, current_event
         STOP_ACQUISITION = False
+        current_event = 0  # Reset the event counter
         print("Starting acquisition...")
 
         # Generate a unique file name based on the current timestamp
@@ -162,6 +163,7 @@ class MainWindow(QMainWindow):
         global STOP_ACQUISITION
         STOP_ACQUISITION = True
         print("Stopping acquisition...")
+
 
 # Main function
 def main():
