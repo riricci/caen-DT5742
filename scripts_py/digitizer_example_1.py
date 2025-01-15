@@ -8,7 +8,7 @@ import plotly.express as px
 def configure_digitizer(digitizer: CAEN_DT5742_Digitizer):
     digitizer.set_sampling_frequency(MHz=5000) # possible values: 5000, 2500, 1000, 750
     digitizer.set_record_length(1024) # possible values: 1024, 512, 256, 136
-    digitizer.set_max_num_events_BLT(1) # number of events taken in the same window
+    digitizer.set_max_num_events_BLT(4) # number of events taken in the same window
     digitizer.set_acquisition_mode('sw_controlled') 
     digitizer.set_ext_trigger_input_mode('disabled') # to be studied
     digitizer.write_register(0x811C, 0x000D0001)  # Enable busy signal on GPO.
@@ -25,7 +25,7 @@ def convert_dicitonaries_to_data_frame(waveforms: dict):
     data = []
     for n_event, event_waveforms in enumerate(waveforms):
         for n_channel, waveform_data in event_waveforms.items():
-            if n_channel not in ['CH0', 'trigger_group_1']:  # Filtro per CH0 e TR0 (supponendo TR0 sia trigger_group_1)
+            if n_channel not in ['CH0', 'trigger_group_1']:  # consider only CH0 e TR0
                 continue
             df = pandas.DataFrame(waveform_data)
             df['n_event'] = n_event
@@ -42,13 +42,13 @@ if __name__ == '__main__':
 
     # Configuring digitizer
     configure_digitizer(d)
-    d.set_max_num_events_BLT(1024)  # Configura la massima capacità del buffer interno.
+    d.set_max_num_events_BLT(4)  # Configura la massima capacità del buffer interno.
 
     # Data acquisition
     n_events = 0
     ACQUIRE_AT_LEAST_THIS_NUMBER_OF_EVENTS = 2222
     data_frames = []
-    sampling_frequency = 2500 #5000  # check whether this is in conflict with the first function
+    sampling_frequency = 5000 #5000  # check whether this is in conflict with the first function
 
     with d:  # acquiring frames with digitizer
         print('Digitizer is enabled! Acquiring data...')

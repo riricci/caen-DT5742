@@ -10,12 +10,13 @@ import time
 import threading
 
 # Initial Configuration
-THRESHOLD = -0.05
+THRESHOLD = -0.5
 DATA_DIR = Path(__file__).parent / "data"
 OUTPUT_HTML = DATA_DIR / "live_waveform_plot.html"
 OUTPUT_TXT = DATA_DIR / "waveforms.txt"
 OUTPUT_ROOT = DATA_DIR / "waveforms.root"
 STOP_ACQUISITION = False
+current_event = 0  # Global variable to track the current event number
 
 # Ensure the data folder exists
 DATA_DIR.mkdir(exist_ok=True)
@@ -53,22 +54,24 @@ def save_waveforms_to_txt(data, filename):
             f.write("\n")
     print(f"Waveforms saved to TXT file: {filename}")
 
-def save_waveforms_to_root(data, filename):
-    """Save data in ROOT format, separated by event."""
-    if data.empty:
-        print("WARNING: No data to save to ROOT.")
-        return
+# def save_waveforms_to_root(data, filename):
+#     """Save data in ROOT format, separated by event."""
+#     if data.empty:
+#         print("WARNING: No data to save to ROOT.")
+#         return
 
-    with uproot.recreate(filename) as root_file:
-        for event, group in data.groupby('n_event'):  # Use 'n_event' directly as key
-            tree_data = {
-                "Time_s": group["Time (s)"].to_numpy(),
-                "Amplitude_V": group["Amplitude (V)"].to_numpy()
-            }
+#     # Use 'update' to append data without overwriting
+#     with uproot.update(filename) as root_file:
+#         for event, group in data.groupby('n_event'):
+#             tree_data = {
+#                 "Time_s": group["Time (s)"].to_numpy(),
+#                 "Amplitude_V": group["Amplitude (V)"].to_numpy()
+#             }
 
-            # Save data under a unique event
-            root_file[f"Event_{event}"] = tree_data
-    print(f"Waveforms saved to ROOT file: {filename}")
+#             # Save data under a unique key for the event
+#             root_file[f"Event_{event}"] = tree_data
+
+#     print(f"Waveforms saved to ROOT file: {filename}")
 
 def generate_html_plot(data, output_path):
     """Generate an interactive plot and save it in HTML format."""
@@ -86,8 +89,7 @@ def generate_html_plot(data, output_path):
 
 # Data acquisition function
 def data_acquisition_and_processing(digitizer):
-    global STOP_ACQUISITION
-    n_events = 0
+    global STOP_ACQUISITION, current_event
     while not STOP_ACQUISITION:
         try:
             print("Acquiring data from digitizer...")
@@ -102,6 +104,14 @@ def data_acquisition_and_processing(digitizer):
             # Convert data into DataFrame
             data = convert_dicitonaries_to_data_frame(waveforms)
 
+            # Update the 'n_event' index with the current event number
+            data = data.reset_index()  # Reset existing index
+            data['n_event'] = current_event  # Assign the current event number
+            data = data.set_index(['n_event', 'n_channel'])  # Reassign the index
+
+            # Increment the event counter
+            current_event += 1
+
             # Filter only the data from channel CH0
             ch0_data = data.loc[(slice(None), 'CH0'), :]
 
@@ -111,7 +121,7 @@ def data_acquisition_and_processing(digitizer):
             if not ch0_data_above_threshold.empty:
                 # Save the filtered data in TXT and ROOT formats
                 save_waveforms_to_txt(ch0_data_above_threshold, OUTPUT_TXT)
-                save_waveforms_to_root(ch0_data_above_threshold, OUTPUT_ROOT)
+                # save_waveforms_to_root(ch0_data_above_threshold, OUTPUT_ROOT)
 
             # Combine CH0 data and trigger data for the plot
             trigger_data = data.loc[(slice(None), 'trigger_group_1'), :]
@@ -120,9 +130,7 @@ def data_acquisition_and_processing(digitizer):
             # Generate HTML plot
             generate_html_plot(combined_data, OUTPUT_HTML)
 
-            # Increment event counter
-            n_events += len(waveforms)
-            print(f"Processed {n_events} events.")
+            print(f"Processed {current_event} events.")
 
         except Exception as e:
             print(f"Error during acquisition or processing: {e}")
