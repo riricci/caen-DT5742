@@ -8,12 +8,12 @@ from digitizer_example_1 import configure_digitizer, convert_dicitonaries_to_dat
 import pandas as pd
 import plotly.express as px
 from pathlib import Path
+from datetime import datetime
 
 # Initial Configuration
 THRESHOLD = -0.5
 DATA_DIR = Path(__file__).parent / "data"
 OUTPUT_HTML = DATA_DIR / "live_waveform_plot.html"
-OUTPUT_TXT = DATA_DIR / "waveforms.txt"
 STOP_ACQUISITION = False
 current_event = 0  # Global variable to track the current event number
 
@@ -71,7 +71,7 @@ def generate_html_plot(data, output_path):
     print(f"Plot saved to {output_path}")
 
 # Data acquisition function
-def data_acquisition_and_processing(digitizer):
+def data_acquisition_and_processing(digitizer, output_txt):
     global STOP_ACQUISITION, current_event
     while not STOP_ACQUISITION:
         try:
@@ -103,7 +103,7 @@ def data_acquisition_and_processing(digitizer):
 
             if not ch0_data_above_threshold.empty:
                 # Save the filtered data in TXT format
-                save_waveforms_to_txt(ch0_data_above_threshold, OUTPUT_TXT)
+                save_waveforms_to_txt(ch0_data_above_threshold, output_txt)
 
             # Combine CH0 data and trigger data for the plot
             trigger_data = data.loc[(slice(None), 'trigger_group_1'), :]
@@ -143,14 +143,18 @@ class MainWindow(QMainWindow):
         global STOP_ACQUISITION
         STOP_ACQUISITION = False
         print("Starting acquisition...")
-        
+
+        # Generate a unique file name based on the current timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_txt = DATA_DIR / f"waveforms_{timestamp}.txt"
+
         # Configure the digitizer
         digitizer = CAEN_DT5742_Digitizer(LinkNum=0)
         print('Connected with:', digitizer.idn)
         configure_digitizer(digitizer)
 
         # Start the data acquisition thread
-        acquisition_thread = threading.Thread(target=data_acquisition_and_processing, args=(digitizer,))
+        acquisition_thread = threading.Thread(target=data_acquisition_and_processing, args=(digitizer, output_txt))
         acquisition_thread.daemon = True
         acquisition_thread.start()
 
