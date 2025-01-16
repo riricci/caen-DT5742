@@ -4,11 +4,11 @@ import threading
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QWidget
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+import pandas as pd
+from datetime import datetime
+from pathlib import Path
 from CAENpy.CAENDigitizer import CAEN_DT5742_Digitizer
 from digitizer_example_1 import configure_digitizer, convert_dicitonaries_to_data_frame
-import pandas as pd
-from pathlib import Path
-from datetime import datetime
 
 # Initial Configuration
 THRESHOLD = -0.5
@@ -18,24 +18,6 @@ current_event = 0  # Global variable to track the current event number
 
 # Ensure the data folder exists
 DATA_DIR.mkdir(exist_ok=True)
-
-# MplCanvas for Matplotlib plots
-class MplCanvas(FigureCanvas):
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
-        self.fig = Figure(figsize=(width, height), dpi=dpi)
-        self.ax = self.fig.add_subplot(111)
-        super().__init__(self.fig)
-
-    def plot_waveform(self, data):
-        """Plot the waveform data on the canvas."""
-        self.ax.clear()
-        for (event, channel), group in data.groupby(level=['n_event', 'n_channel']):
-            self.ax.plot(group['Time (s)'], group['Amplitude (V)'], label=f"Event {event}, {channel}")
-        self.ax.set_title("CAEN Digitizer Waveform")
-        self.ax.set_xlabel("Time (s)")
-        self.ax.set_ylabel("Amplitude (V)")
-        self.ax.legend()
-        self.draw()
 
 # Functions for saving and processing data
 def save_waveforms_to_txt(data, filename):
@@ -54,7 +36,7 @@ def save_waveforms_to_txt(data, filename):
     print(f"Waveforms saved to TXT file: {filename}")
 
 # Data acquisition function
-def data_acquisition_and_processing(digitizer, output_txt, canvas):
+def data_acquisition_and_processing(digitizer, output_txt, update_plot_callback):
     global STOP_ACQUISITION, current_event
     while not STOP_ACQUISITION:
         try:
@@ -88,15 +70,42 @@ def data_acquisition_and_processing(digitizer, output_txt, canvas):
                 # Save the filtered data in TXT format
                 save_waveforms_to_txt(ch0_data_above_threshold, output_txt)
 
-            # Update the plot on the canvas
-            canvas.plot_waveform(data)
+            # Combine CH0 data and trigger data for the plot
+            trigger_data = data.loc[(slice(None), 'trigger_group_1'), :]
+            combined_data = pd.concat([ch0_data_above_threshold, trigger_data])
+
+            # Update the plot
+            update_plot_callback(combined_data)
 
             print(f"Processed {current_event} events.")
 
         except Exception as e:
             print(f"Error during acquisition or processing: {e}")
 
-# PyQt MainWindow with start/stop buttons
+# Matplotlib Canvas for Plotting
+class MplCanvas(FigureCanvas):
+    def __init__(self, parent=None, width=5, height=4, dpi=100):
+        self.fig = Figure(figsize=(width, height), dpi=dpi)
+        self.ax = self.fig.add_subplot(111)
+        super().__init__(self.fig)
+
+    def plot_data(self, data):
+        self.ax.clear()
+        if not data.empty:
+            for (n_event, n_channel), group in data.groupby(level=['n_event', 'n_channel']):
+                self.ax.plot(
+                    group['Time (s)'], 
+                    group['Amplitude (V)'], 
+                    label=f"Event {n_event}, {n_channel}", 
+                    linestyle='', marker='.', markersize=4  # Smaller and more delicate markers
+                )
+        self.ax.set_title("CAEN Digitizer Waveform")
+        self.ax.set_xlabel("Time (s)")
+        self.ax.set_ylabel("Amplitude (V)")
+        self.ax.legend()
+        self.draw()
+
+# PyQt MainWindow with start/stop buttons and plot
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -104,18 +113,16 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("CAEN Digitizer Interface")
         self.setGeometry(100, 100, 800, 600)
 
-        # Layout and widgets
-        self.layout = QVBoxLayout()
-
         self.start_button = QPushButton("Start Acquisition", self)
         self.start_button.clicked.connect(self.start_acquisition)
-        self.layout.addWidget(self.start_button)
 
         self.stop_button = QPushButton("Stop Acquisition", self)
         self.stop_button.clicked.connect(self.stop_acquisition)
+
+        self.layout = QVBoxLayout()
+        self.layout.addWidget(self.start_button)
         self.layout.addWidget(self.stop_button)
 
-        # Matplotlib canvas
         self.canvas = MplCanvas(self, width=8, height=6, dpi=100)
         self.layout.addWidget(self.canvas)
 
@@ -139,7 +146,10 @@ class MainWindow(QMainWindow):
         configure_digitizer(digitizer)
 
         # Start the data acquisition thread
-        acquisition_thread = threading.Thread(target=data_acquisition_and_processing, args=(digitizer, output_txt, self.canvas))
+        acquisition_thread = threading.Thread(
+            target=data_acquisition_and_processing, 
+            args=(digitizer, output_txt, self.update_plot)
+        )
         acquisition_thread.daemon = True
         acquisition_thread.start()
 
@@ -147,6 +157,13 @@ class MainWindow(QMainWindow):
         global STOP_ACQUISITION
         STOP_ACQUISITION = True
         print("Stopping acquisition...")
+
+    def update_plot(self, data):
+        # Filter data for the first event only
+        if not data.empty:
+            first_event = data.index.get_level_values('n_event').min()
+            data = data.loc[(first_event, slice(None)), :]
+        self.canvas.plot_data(data)
 
 # Main function
 def main():
