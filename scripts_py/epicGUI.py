@@ -91,19 +91,43 @@ class MplCanvas(FigureCanvas):
 
     def plot_data(self, data):
         self.ax.clear()
+
+        # Imposta lo stile scuro
+        self.fig.patch.set_facecolor('#121212')  # Colore di sfondo della figura
+        self.ax.set_facecolor('#121212')        # Colore di sfondo dell'area del plot
+        self.ax.tick_params(colors='white')     # Colore delle etichette degli assi
+        self.ax.xaxis.label.set_color('white')  # Colore della label dell'asse x
+        self.ax.yaxis.label.set_color('white')  # Colore della label dell'asse y
+        self.ax.title.set_color('white')        # Colore del titolo del plot
+
+        # Abilita la griglia
+        self.ax.grid(color='gray', linestyle='--', linewidth=0.5, alpha=0.7)
+
         if not data.empty:
             for (n_event, n_channel), group in data.groupby(level=['n_event', 'n_channel']):
                 self.ax.plot(
-                    group['Time (s)'], 
-                    group['Amplitude (V)'], 
-                    label=f"Event {n_event}, {n_channel}", 
-                    linestyle='', marker='.', markersize=4  # Smaller and more delicate markers
+                    group['Time (s)'],
+                    group['Amplitude (V)'],
+                    label=f"Event {n_event}, {n_channel}",
+                    linestyle='',
+                    marker='.',
+                    markersize=4  # Marker più piccoli per una visualizzazione pulita
                 )
+
         self.ax.set_title("CAEN Digitizer Waveform")
         self.ax.set_xlabel("Time (s)")
         self.ax.set_ylabel("Amplitude (V)")
-        self.ax.legend()
+        
+        # Personalizzazione della legenda
+        legend = self.ax.legend(loc='upper right', fontsize='small', facecolor='black', edgecolor='white')
+        if legend:
+            for text in legend.get_texts():
+                text.set_color('white')  # Colore bianco per i testi della legenda
+
         self.draw()
+
+
+
 
 # PyQt MainWindow with start/stop buttons and plot
 class MainWindow(QMainWindow):
