@@ -1,44 +1,41 @@
 import sys
 import time
 import threading
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget
-from flask import Flask, send_file
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QWidget
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 from CAENpy.CAENDigitizer import CAEN_DT5742_Digitizer
 from digitizer_example_1 import configure_digitizer, convert_dicitonaries_to_data_frame
 import pandas as pd
-import plotly.express as px
 from pathlib import Path
 from datetime import datetime
 
 # Initial Configuration
 THRESHOLD = -0.5
 DATA_DIR = Path(__file__).parent / "data"
-OUTPUT_HTML = DATA_DIR / "live_waveform_plot.html"
 STOP_ACQUISITION = False
 current_event = 0  # Global variable to track the current event number
 
 # Ensure the data folder exists
 DATA_DIR.mkdir(exist_ok=True)
 
-# Flask App
-def create_flask_app():
-    app = Flask(__name__)
+# MplCanvas for Matplotlib plots
+class MplCanvas(FigureCanvas):
+    def __init__(self, parent=None, width=5, height=4, dpi=100):
+        self.fig = Figure(figsize=(width, height), dpi=dpi)
+        self.ax = self.fig.add_subplot(111)
+        super().__init__(self.fig)
 
-    @app.route('/')
-    def serve_plot():
-        """Serve the HTML file of the plot."""
-        if OUTPUT_HTML.exists():
-            return send_file(OUTPUT_HTML, mimetype='text/html')
-        return "Plot not generated yet. Please wait and refresh.", 404
-
-    @app.route('/stop')
-    def stop_acquisition():
-        """Safely stop data acquisition."""
-        global STOP_ACQUISITION
-        STOP_ACQUISITION = True
-        return "Data acquisition stopped.", 200
-
-    return app
+    def plot_waveform(self, data):
+        """Plot the waveform data on the canvas."""
+        self.ax.clear()
+        for (event, channel), group in data.groupby(level=['n_event', 'n_channel']):
+            self.ax.plot(group['Time (s)'], group['Amplitude (V)'], label=f"Event {event}, {channel}")
+        self.ax.set_title("CAEN Digitizer Waveform")
+        self.ax.set_xlabel("Time (s)")
+        self.ax.set_ylabel("Amplitude (V)")
+        self.ax.legend()
+        self.draw()
 
 # Functions for saving and processing data
 def save_waveforms_to_txt(data, filename):
@@ -56,22 +53,8 @@ def save_waveforms_to_txt(data, filename):
             f.write("\n")
     print(f"Waveforms saved to TXT file: {filename}")
 
-def generate_html_plot(data, output_path):
-    """Generate an interactive plot and save it in HTML format."""
-    fig = px.line(
-        title='CAEN Digitizer Waveform and Trigger',
-        data_frame=data.reset_index(),
-        x='Time (s)',
-        y='Amplitude (V)',
-        color='n_channel',
-        markers=True,
-        facet_row='n_event',
-    )
-    fig.write_html(output_path, include_plotlyjs='cdn')
-    print(f"Plot saved to {output_path}")
-
 # Data acquisition function
-def data_acquisition_and_processing(digitizer, output_txt):
+def data_acquisition_and_processing(digitizer, output_txt, canvas):
     global STOP_ACQUISITION, current_event
     while not STOP_ACQUISITION:
         try:
@@ -105,12 +88,8 @@ def data_acquisition_and_processing(digitizer, output_txt):
                 # Save the filtered data in TXT format
                 save_waveforms_to_txt(ch0_data_above_threshold, output_txt)
 
-            # Combine CH0 data and trigger data for the plot
-            trigger_data = data.loc[(slice(None), 'trigger_group_1'), :]
-            combined_data = pd.concat([ch0_data_above_threshold, trigger_data])
-
-            # Generate HTML plot
-            generate_html_plot(combined_data, OUTPUT_HTML)
+            # Update the plot on the canvas
+            canvas.plot_waveform(data)
 
             print(f"Processed {current_event} events.")
 
@@ -123,17 +102,22 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("CAEN Digitizer Interface")
-        self.setGeometry(100, 100, 300, 150)
+        self.setGeometry(100, 100, 800, 600)
+
+        # Layout and widgets
+        self.layout = QVBoxLayout()
 
         self.start_button = QPushButton("Start Acquisition", self)
         self.start_button.clicked.connect(self.start_acquisition)
+        self.layout.addWidget(self.start_button)
 
         self.stop_button = QPushButton("Stop Acquisition", self)
         self.stop_button.clicked.connect(self.stop_acquisition)
-
-        self.layout = QVBoxLayout()
-        self.layout.addWidget(self.start_button)
         self.layout.addWidget(self.stop_button)
+
+        # Matplotlib canvas
+        self.canvas = MplCanvas(self, width=8, height=6, dpi=100)
+        self.layout.addWidget(self.canvas)
 
         self.container = QWidget()
         self.container.setLayout(self.layout)
@@ -155,7 +139,7 @@ class MainWindow(QMainWindow):
         configure_digitizer(digitizer)
 
         # Start the data acquisition thread
-        acquisition_thread = threading.Thread(target=data_acquisition_and_processing, args=(digitizer, output_txt))
+        acquisition_thread = threading.Thread(target=data_acquisition_and_processing, args=(digitizer, output_txt, self.canvas))
         acquisition_thread.daemon = True
         acquisition_thread.start()
 
@@ -164,23 +148,11 @@ class MainWindow(QMainWindow):
         STOP_ACQUISITION = True
         print("Stopping acquisition...")
 
-
 # Main function
 def main():
     app = QApplication(sys.argv)
-
-    # Create Flask app separately
-    flask_app = create_flask_app()
-
-    # Start the Flask server in a separate thread
-    flask_thread = threading.Thread(target=flask_app.run, kwargs={'host': '0.0.0.0', 'port': 8050})
-    flask_thread.daemon = True
-    flask_thread.start()
-
-    # Start the Qt Application
     window = MainWindow()
     window.show()
-
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
