@@ -10,12 +10,13 @@ from datetime import datetime
 from pathlib import Path
 from CAENpy.CAENDigitizer import CAEN_DT5742_Digitizer
 from digitizer_example_1 import configure_digitizer, convert_dicitonaries_to_data_frame
+from baseline import extract_baseline_from_channel
 
 # Initial Configuration
 THRESHOLD = -0.5
 DATA_DIR = Path(__file__).parent / "data"
 STOP_ACQUISITION = False
-current_event = 0  # Global variable to track the current event number
+current_event = 0  # Global variable to track the current event number   
 
 # Ensure the data folder exists
 DATA_DIR.mkdir(exist_ok=True)
@@ -41,7 +42,13 @@ def data_acquisition_and_processing(digitizer, output_txt, update_plot_callback,
         try:
             with digitizer:
                 time.sleep(0.5)
-                waveforms = digitizer.get_waveforms()
+                waveforms = digitizer.get_waveforms(True, False)
+                print(waveforms)
+                # baseline = extract_baseline_from_channel(digitizer, 0) # baseline from CH0
+                # if baseline is not None:
+                #     print(f"Baseline for CH{0} BEFORE acquisition: {baseline}")
+                # else:
+                #     print(f"Failed to extract baseline for CH{0}.")
 
             if not waveforms:
                 continue
@@ -59,15 +66,16 @@ def data_acquisition_and_processing(digitizer, output_txt, update_plot_callback,
 
             # Filter data for CH0 and apply the threshold
             ch0_data = data.loc[(slice(None), 'CH0'), :]
+            ch1_data = data.loc[(slice(None), 'CH1'), :]
             ch0_data_above_threshold = ch0_data[ch0_data['Amplitude (V)'] > THRESHOLD]
+            ch1_data_above_threshold = ch1_data[ch1_data['Amplitude (V)'] > THRESHOLD]
 
-            if not ch0_data_above_threshold.empty:
-                save_waveforms_to_txt(ch0_data_above_threshold, output_txt)
+            #if not ch0_data_above_threshold.empty:
+                #save_waveforms_to_txt(ch0_data_above_threshold, output_txt)
 
             # Combine CH0 data and trigger data for the plot
             trigger_data = data.loc[(slice(None), 'trigger_group_1'), :]
-            combined_data = pd.concat([ch0_data_above_threshold, trigger_data])
-
+            combined_data = pd.concat([ch0_data_above_threshold, ch1_data_above_threshold, trigger_data])
             # Update the plot
             update_plot_callback(combined_data)
 
@@ -102,7 +110,7 @@ class MplCanvas(FigureCanvas):
                     group['Time (s)'],
                     group['Amplitude (V)'],
                     label=f"Event {n_event}, {n_channel}",
-                    linestyle='',
+                    linestyle='-',
                     marker='.',
                     markersize=4
                 )
@@ -129,10 +137,10 @@ class MainWindow(QMainWindow):
 
         # Buttons for acquisition control
         self.start_button = QPushButton("Start Acquisition", self)
-        self.start_button.clicked.connect(self.start_acquisition)
+        self.start_button.clicked.connect(self.start_gui_acquisition)
 
         self.stop_button = QPushButton("Stop Acquisition", self)
-        self.stop_button.clicked.connect(self.stop_acquisition)
+        self.stop_button.clicked.connect(self.stop_gui_acquisition)
 
         # Button to display the number of events acquired
         self.event_button = QPushButton("Acquired 0 events", self)
@@ -154,7 +162,7 @@ class MainWindow(QMainWindow):
         self.container.setLayout(self.layout)
         self.setCentralWidget(self.container)
 
-    def start_acquisition(self):
+    def start_gui_acquisition(self):
         """Starts the data acquisition process."""
         global STOP_ACQUISITION, current_event
         STOP_ACQUISITION = False
@@ -170,6 +178,14 @@ class MainWindow(QMainWindow):
         print('Connected with:', digitizer.idn)
         configure_digitizer(digitizer)
 
+        # # experimental - channel baseline analysis
+        # baseline = extract_baseline_from_channel(digitizer, 0) # baseline from CH0
+        
+        # if baseline is not None:
+        #     print(f"Baseline for CH{0} BEFORE acquisition: {baseline}")
+        # else:
+        #     print(f"Failed to extract baseline for CH{0}.")
+
         # Start the acquisition thread
         acquisition_thread = threading.Thread(
             target=data_acquisition_and_processing,
@@ -178,7 +194,7 @@ class MainWindow(QMainWindow):
         acquisition_thread.daemon = True
         acquisition_thread.start()
 
-    def stop_acquisition(self):
+    def stop_gui_acquisition(self):
         """Stops the data acquisition process."""
         global STOP_ACQUISITION
         STOP_ACQUISITION = True
