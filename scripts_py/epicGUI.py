@@ -183,11 +183,9 @@ class MainWindow(QMainWindow):
         output_txt = DATA_DIR / f"waveforms_{timestamp}.txt"
 
         # Configure the digitizer
-        # self.digitizer = CAEN_DT5742_Digitizer(LinkNum=0)
-        # print('Connected with:', self.digitizer.idn)
         self.digitizer.reset()  # Soft reset the digitizer
-        configure_digitizer(self.digitizer)
-        self.digitizer.set_sampling_frequency(MHz=current_frequency)  # Apply the current frequency
+        configure_digitizer(self.digitizer, current_frequency)
+        # self.digitizer.set_sampling_frequency(MHz=current_frequency)  # Apply the current frequency
 
         # Disable frequency buttons
         for btn in self.freq_buttons:
