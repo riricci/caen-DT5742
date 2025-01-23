@@ -1,8 +1,9 @@
 import sys
 import time
 import threading
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QWidget, QLabel, QHBoxLayout
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QWidget, QLabel, QHBoxLayout, QLineEdit
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIntValidator
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
@@ -19,6 +20,7 @@ DATA_DIR = Path(__file__).parent / "data"
 STOP_ACQUISITION = False
 current_event = 0  # Global variable to track the current event number
 current_frequency = 5000  # Default sampling frequency in MHz
+current_BLT = 1  # Default BLT value
 
 # Ensure the data folder exists
 DATA_DIR.mkdir(exist_ok=True)
@@ -130,9 +132,18 @@ class MainWindow(QMainWindow):
         self.freq_buttons = []
         for freq in [5, 2.5, 1, 0.75]:  # Frequencies in GHz
             btn = QPushButton(f"{freq} GHz", self)
-            btn.clicked.connect(lambda _, f=freq: self.set_sampling_frequency(f))
+            btn.clicked.connect(lambda _, f=freq: self.set_gui_sampling_frequency(f))
             btn.setEnabled(True)  # Enable by default
             self.freq_buttons.append(btn)
+
+        # BLT input field and button
+        self.blt_input = QLineEdit(self)
+        self.blt_input.setValidator(QIntValidator(1, 1023, self))  # Accept only numbers between 1 and 1023
+        self.blt_input.setPlaceholderText("Enter BLT (1-1023)")
+        self.blt_input.setFixedWidth(150)
+
+        self.set_blt_button = QPushButton("Set BLT", self)
+        self.set_blt_button.clicked.connect(self.set_blt_from_input)
 
         # Button to display the number of events acquired
         self.event_button = QPushButton("Acquired 0 events", self)
@@ -146,8 +157,15 @@ class MainWindow(QMainWindow):
         for btn in self.freq_buttons:
             control_layout.addWidget(btn)
 
+        # BLT input layout
+        blt_layout = QHBoxLayout()
+        blt_layout.addWidget(QLabel("BLT:"))
+        blt_layout.addWidget(self.blt_input)
+        blt_layout.addWidget(self.set_blt_button)
+
         self.layout = QVBoxLayout()
         self.layout.addLayout(control_layout)
+        self.layout.addLayout(blt_layout)
         self.layout.addWidget(self.event_button)
 
         # Canvas for the plot
@@ -163,13 +181,25 @@ class MainWindow(QMainWindow):
         self.container.setLayout(self.layout)
         self.setCentralWidget(self.container)
 
-    def set_sampling_frequency(self, freq):
-        """Set the sampling frequency of the digitizer."""
+    def set_gui_sampling_frequency(self, freq):
+        """Set the sampling frequency of the digitizer from the GUI."""
         global current_frequency
         current_frequency = int(freq * 1000)  # Convert GHz to MHz
         if self.digitizer:
             self.digitizer.set_sampling_frequency(MHz=current_frequency)
         print(f"Sampling frequency set to {freq} GHz ({current_frequency} MHz)")
+
+    def set_blt_from_input(self):
+        """Set the BLT from the input field."""
+        global current_BLT
+        try:
+            blt_value = int(self.blt_input.text())
+            current_BLT = blt_value
+            if self.digitizer:
+                self.digitizer.set_max_num_events_BLT(current_BLT)
+            print(f"BLT set to {current_BLT}")
+        except ValueError:
+            print("Invalid BLT value. Please enter a number between 1 and 1023.")
 
     def start_gui_acquisition(self):
         """Starts the data acquisition process."""
@@ -184,8 +214,7 @@ class MainWindow(QMainWindow):
 
         # Configure the digitizer
         self.digitizer.reset()  # Soft reset the digitizer
-        configure_digitizer(self.digitizer, current_frequency)
-        # self.digitizer.set_sampling_frequency(MHz=current_frequency)  # Apply the current frequency
+        configure_digitizer(self.digitizer, current_frequency, current_BLT)
 
         # Disable frequency buttons
         for btn in self.freq_buttons:
