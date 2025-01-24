@@ -12,7 +12,7 @@ import pandas as pd
 from datetime import datetime
 from pathlib import Path
 from CAENpy.CAENDigitizer import CAEN_DT5742_Digitizer
-from digitizer_example_1 import configure_digitizer, convert_dicitonaries_to_data_frame
+from digitizer_example_1 import configure_digitizer, convert_dicitonaries_to_data_frame, get_corrected_waveforms
 
 # Initial Configuration
 THRESHOLD = -0.5
@@ -21,20 +21,23 @@ STOP_ACQUISITION = False
 current_event = 0  # Global variable to track the current event number
 current_frequency = 5000  # Default sampling frequency in MHz
 current_BLT = 1  # Default BLT value
+current_DC_offset = 0  # Default DC offset value
+current_DRS4_correction = True
+current_voltage_unit = True # True for ADCu, False for Volts
+voltage_string = "Amplitude (ADCu)"
 
 # Ensure the data folder exists
 DATA_DIR.mkdir(exist_ok=True)
 
 # Data acquisition function
-def data_acquisition_and_processing(digitizer, output_txt, update_plot_callback, update_event_button_callback):
+def data_acquisition_and_processing(digitizer, output_txt, update_plot_callback, update_event_button_callback, update_vpp_button_callback):
     """Handles data acquisition, processing, and GUI updates."""
     global STOP_ACQUISITION, current_event
-    while not STOP_ACQUISITION:
+    while not STOP_ACQUISITION: 
         try:
             with digitizer:
                 time.sleep(0.5)
-                waveforms = digitizer.get_waveforms(True, True)
-
+                waveforms = get_corrected_waveforms(digitizer,True, current_voltage_unit, current_DRS4_correction)
             if not waveforms:
                 continue
 
@@ -55,7 +58,18 @@ def data_acquisition_and_processing(digitizer, output_txt, update_plot_callback,
 
             # Combine CH0 and CH1 data for the plot
             combined_data = pd.concat([ch0_data, ch1_data])
-            update_plot_callback(combined_data)
+            update_plot_callback(ch0_data)
+
+            # Calculate peak-to-peak voltage for CH0 and CH1
+            vpp_values = {}
+            for channel in ['CH0', 'CH1']:
+                channel_data = data.loc[(slice(None), channel), :]
+                if not channel_data.empty:
+                    vpp = channel_data[voltage_string].max() - channel_data[voltage_string].min()
+                    vpp_values[channel] = vpp
+
+            # Update the GUI with the Vpp values
+            update_vpp_button_callback(vpp_values)
 
         except Exception as e:
             print(f"Error during acquisition: {e}")
@@ -86,7 +100,7 @@ class MplCanvas(FigureCanvas):
             for (n_event, n_channel), group in data.groupby(level=['n_event', 'n_channel']):
                 self.ax.plot(
                     group['Time (s)'],
-                    group['Amplitude (ADCu)'],
+                    group[voltage_string],
                     label=f"Event {n_event}, {n_channel}",
                     linestyle='-',
                     marker='.',
@@ -95,7 +109,7 @@ class MplCanvas(FigureCanvas):
 
         self.ax.set_title("CAEN Digitizer Waveform")
         self.ax.set_xlabel("Time (s)")
-        self.ax.set_ylabel("Amplitude (ADCu)")
+        self.ax.set_ylabel(voltage_string)
 
         # Increase tick frequency
         self.ax.xaxis.set_major_locator(MaxNLocator(nbins=10))
@@ -127,6 +141,15 @@ class MainWindow(QMainWindow):
 
         self.stop_button = QPushButton("Stop Acquisition", self)
         self.stop_button.clicked.connect(self.stop_gui_acquisition)
+        
+        # Button for switching between ADCu and Volts
+        self.voltage_unit_button = QPushButton("Change Voltage unit", self)
+        # self.voltage_unit_button.clicked.connect(lambda: self.voltage_unit_button.setText("Volts") if self.voltage_unit_button.text() == "ADCu" else self.voltage_unit_button.setText("ADCu"))
+        self.voltage_unit_button.clicked.connect(self.set_gui_voltage_unit)
+        
+        # Button for DRS4 correction
+        self.DRS4_correction_button = QPushButton("DRS4 Correction", self)
+        self.DRS4_correction_button.clicked.connect(self.set_gui_DRS4_correction)
 
         # Buttons for sampling frequency
         self.freq_buttons = []
@@ -150,6 +173,11 @@ class MainWindow(QMainWindow):
         self.event_button.setEnabled(False)
         self.event_button.setStyleSheet("color: white; font-size: 16px; background-color: #333;")
 
+        # Button to display the peak-to-peak voltage
+        self.vpp_button = QPushButton("Vpp: N/A ADCu", self)
+        self.vpp_button.setEnabled(False)
+        self.vpp_button.setStyleSheet("color: white; font-size: 16px; background-color: #333;")
+
         # Layouts
         control_layout = QHBoxLayout()
         control_layout.addWidget(self.start_button)
@@ -167,6 +195,9 @@ class MainWindow(QMainWindow):
         self.layout.addLayout(control_layout)
         self.layout.addLayout(blt_layout)
         self.layout.addWidget(self.event_button)
+        self.layout.addWidget(self.vpp_button)
+        self.layout.addWidget(self.DRS4_correction_button)
+        self.layout.addWidget(self.voltage_unit_button)
 
         # Canvas for the plot
         self.canvas = MplCanvas(self, width=8, height=6, dpi=100)
@@ -185,9 +216,39 @@ class MainWindow(QMainWindow):
         """Set the sampling frequency of the digitizer from the GUI."""
         global current_frequency
         current_frequency = int(freq * 1000)  # Convert GHz to MHz
-        if self.digitizer:
-            self.digitizer.set_sampling_frequency(MHz=current_frequency)
         print(f"Sampling frequency set to {freq} GHz ({current_frequency} MHz)")
+        
+    def set_gui_voltage_unit(self):
+        """Set the voltage unit of the digitizer from the GUI."""
+        global current_voltage_unit, voltage_string
+        current_voltage_unit = not current_voltage_unit  # Cambia lo stato della variabile globale
+
+        # Aggiorna l'etichetta del bottone e la variabile globale voltage_string
+        if current_voltage_unit:
+            voltage_string = "Amplitude (ADCu)"  # Manteniamo ADCu come chiave
+            self.voltage_unit_button.setText("Switch to mV")
+        else:
+            voltage_string = "Amplitude (V)"  # Manteniamo V per i dati, ma calcoliamo i valori in mV
+            self.voltage_unit_button.setText("Switch to ADCu")
+
+        # Aggiorna il bottone Vpp per riflettere l'unità corrente
+        self.update_vpp_button({})  # Passa un dizionario vuoto se non ci sono dati al momento
+
+        print(f"Voltage unit set to {current_voltage_unit}, updated voltage_string: {voltage_string}")
+
+
+        
+    def set_gui_DRS4_correction(self):
+        """Set the DRS4 correction of the digitizer from the GUI."""
+        global current_DRS4_correction
+        current_DRS4_correction = not current_DRS4_correction
+        print(f"DRS4 correction set to {current_DRS4_correction}")
+        
+    def set_gui_DC_offset(self, offset):
+        """Set the DC offset of the digitizer from the GUI."""
+        global current_DC_offset
+        current_DC_offset = int(offset)
+        print(f"DC offset set to {current_DC_offset}")
 
     def set_blt_from_input(self):
         """Set the BLT from the input field."""
@@ -195,11 +256,23 @@ class MainWindow(QMainWindow):
         try:
             blt_value = int(self.blt_input.text())
             current_BLT = blt_value
-            if self.digitizer:
-                self.digitizer.set_max_num_events_BLT(current_BLT)
             print(f"BLT set to {current_BLT}")
         except ValueError:
             print("Invalid BLT value. Please enter a number between 1 and 1023.")
+    
+    def update_vpp_button(self, vpp_values):
+        """Updates the Vpp button with the calculated peak-to-peak voltage."""
+        if vpp_values:
+            unit = "ADCu" if current_voltage_unit else "mV"
+            vpp_text = ", ".join([
+                f"{ch}: {vpp * 1000:.2f} {unit}" if voltage_string == "Amplitude (V)" else f"{ch}: {vpp:.2f} {unit}"
+                for ch, vpp in vpp_values.items()
+            ])
+            self.vpp_button.setText(f"Vpp: {vpp_text}")
+        else:
+            unit = "ADCu" if current_voltage_unit else "mV"
+            self.vpp_button.setText(f"Vpp: N/A {unit}")
+
 
     def start_gui_acquisition(self):
         """Starts the data acquisition process."""
@@ -214,16 +287,19 @@ class MainWindow(QMainWindow):
 
         # Configure the digitizer
         self.digitizer.reset()  # Soft reset the digitizer
-        configure_digitizer(self.digitizer, current_frequency, current_BLT)
+        configure_digitizer(self.digitizer, current_frequency, current_BLT, current_DC_offset)
 
         # Disable frequency buttons
         for btn in self.freq_buttons:
             btn.setEnabled(False)
+        
+        # Disable DRS4 correction button
+        self.DRS4_correction_button.setEnabled(False)
 
         # Start the acquisition thread
         acquisition_thread = threading.Thread(
             target=data_acquisition_and_processing,
-            args=(self.digitizer, output_txt, self.update_plot, self.update_event_button)
+            args=(self.digitizer, output_txt, self.update_plot, self.update_event_button, self.update_vpp_button)
         )
         acquisition_thread.daemon = True
         acquisition_thread.start()
@@ -237,6 +313,9 @@ class MainWindow(QMainWindow):
         # Enable frequency buttons
         for btn in self.freq_buttons:
             btn.setEnabled(True)
+            
+        # Enable DRS4 correction button
+        self.DRS4_correction_button.setEnabled(True)
 
     def update_plot(self, data):
         """Updates the plot with new data."""
