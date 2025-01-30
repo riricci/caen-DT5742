@@ -12,7 +12,7 @@ import pandas as pd
 from datetime import datetime
 from pathlib import Path
 from CAENpy.CAENDigitizer import CAEN_DT5742_Digitizer
-from digitizer_example_1 import configure_digitizer, convert_dicitonaries_to_data_frame, get_corrected_waveforms
+from digitizer_example_1 import configure_digitizer, convert_dictionaries_to_data_frame, get_corrected_waveforms
 
 # Initial Configuration
 THRESHOLD = -0.5
@@ -42,7 +42,7 @@ def data_acquisition_and_processing(digitizer, output_txt, update_plot_callback,
                 continue
 
             # Convert data into DataFrame
-            data = convert_dicitonaries_to_data_frame(waveforms)
+            data = convert_dictionaries_to_data_frame(waveforms)
             data = data.reset_index()
             data['n_event'] = current_event
             data = data.set_index(['n_event', 'n_channel'])
@@ -58,7 +58,7 @@ def data_acquisition_and_processing(digitizer, output_txt, update_plot_callback,
 
             # Combine CH0 and CH1 data for the plot
             combined_data = pd.concat([ch0_data, ch1_data])
-            update_plot_callback(ch0_data)
+            update_plot_callback(ch1_data)
 
             # Calculate peak-to-peak voltage for CH0 and CH1
             vpp_values = {}

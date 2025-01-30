@@ -11,21 +11,38 @@ def configure_digitizer(digitizer: CAEN_DT5742_Digitizer, freq=5000, BLT=1, DC_o
     digitizer.set_record_length(1024) # possible values: 1024, 512, 256, 136
     digitizer.set_max_num_events_BLT(BLT) # number of events taken in the same window
     digitizer.set_acquisition_mode('sw_controlled') 
-    digitizer.set_ext_trigger_input_mode('disabled') # to be studied
+    digitizer.set_ext_trigger_input_mode('acquisition only') # to be studied
     digitizer.write_register(0x811C, 0x000D0001)  # Enable busy signal on GPO.
-    digitizer.set_fast_trigger_mode(enabled=True) # enables fast trigger on TR0 channel
+    digitizer.set_fast_trigger_mode(enabled=False) # enables fast trigger on TR0 channel
     digitizer.set_fast_trigger_digitizing(enabled=True) # enables fast trigger digitizing. If False, nothing works
     digitizer.enable_channels(group_1=True, group_2=True) # group 1: from 0 to 7, group 2: from 8 to 15
-    digitizer.set_fast_trigger_threshold(22222) # to be studied
+    digitizer.set_fast_trigger_threshold(20934) # to be studied
     # DRS4_CORRECTION to be implemented here
     for ch in [0, 1]:
         digitizer.set_channel_DC_offset(channel=ch, V=DC_offset) # DC offset for CH0 and CH1
-    # digitizer.set_fast_trigger_DC_offset(V=0) # just adjusting the offset of the TRO channel
+    digitizer.set_fast_trigger_DC_offset(32768) # just adjusting the offset of the TRO channel
     digitizer.set_post_trigger_size(0) # percentage (0-100, only int) of the record length to be visualized after the trigger.
     for ch in [0, 1]:
         digitizer.set_trigger_polarity(channel=ch, edge='rising')
+    
+    # def set_ext_trigger_input_mode(self, mode:str):
+	# 	"""Enable or disable the external trigger (TRIG IN).
+		
+	# 	Arguments
+	# 	---------
+	# 	mode: str
+	# 		One of `'disabled'`, `'extout only'`, `'acquisition only'`,
+	# 		`'acquisition and extout'`.
+	# 	"""
+	# 	if mode not in CAEN_DGTZ_TriggerMode:
+	# 		raise ValueError(f'`mode` must be one of {set(CAEN_DGTZ_TriggerMode.keys())}, received {repr(mode)}. ')
+	# 	code = libCAENDigitizer.CAEN_DGTZ_SetExtTriggerInputMode(
+	# 		self._get_handle(), 
+	# 		c_long(CAEN_DGTZ_TriggerMode[mode])
+	# 	)
+	# 	check_error_code(code)
 
-def convert_dicitonaries_to_data_frame(waveforms: dict):
+def convert_dictionaries_to_data_frame(waveforms: dict):
     data = []
     for n_event, event_waveforms in enumerate(waveforms):
         for n_channel, waveform_data in event_waveforms.items():
@@ -107,7 +124,7 @@ if __name__ == '__main__':
             waveforms = d.get_waveforms()  # Acquisisci i dati
             this_readout_n_events = len(waveforms)
             n_events += this_readout_n_events
-            data_frame = convert_dicitonaries_to_data_frame(waveforms)
+            data_frame = convert_dictionaries_to_data_frame(waveforms)
 
             # adding time stamp
             data_frame['Time (s)'] += (n_events - this_readout_n_events) * 1024 / sampling_frequency

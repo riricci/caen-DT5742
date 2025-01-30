@@ -19,26 +19,28 @@ if __name__ == '__main__':
 	# At this point there should be 3 events in the digitizer (provided at least 3 trigger signals went into the trigger input).
 	
 	print(f'Reading data from the digitizer...')
-	waveforms = d.get_waveforms()
+	d.start_acquisition()
 
-	# Data analysis and plotting ---
-	if len(waveforms) == 0:
-		raise RuntimeError('Could not acquire any event. The reason may be that you dont have anything connected to the inputs of the digitizer, or a wrong trigger threshold and/or offset setting.')
+	# waveforms = d.get_waveforms()
 
-	data = convert_dicitonaries_to_data_frame(waveforms)
+	# # Data analysis and plotting ---
+	# if len(waveforms) == 0:
+	# 	raise RuntimeError('Could not acquire any event. The reason may be that you dont have anything connected to the inputs of the digitizer, or a wrong trigger threshold and/or offset setting.')
 
-	print('Acquired data is:')
-	print(data)
+	# data = convert_dicitonaries_to_data_frame(waveforms)
 
-	fig = px.line(
-		title = 'CAEN digitizer testing',
-		data_frame = data.reset_index(),
-		x = 'Time (s)',
-		y = 'Amplitude (V)',
-		color = 'n_channel',
-		facet_row = 'n_event',
-		markers = True,
-	)
-	path_to_plot = (Path(__file__).parent/'plot.html').resolve()
-	fig.write_html(path_to_plot, include_plotlyjs='cdn')
-	print(f'A plot with the waveforms can be found in {path_to_plot}')
+	# print('Acquired data is:')
+	# print(data)
+
+	# fig = px.line(
+	# 	title = 'CAEN digitizer testing',
+	# 	data_frame = data.reset_index(),
+	# 	x = 'Time (s)',
+	# 	y = 'Amplitude (V)',
+	# 	color = 'n_channel',
+	# 	facet_row = 'n_event',
+	# 	markers = True,
+	# )
+	# path_to_plot = (Path(__file__).parent/'plot.html').resolve()
+	# fig.write_html(path_to_plot, include_plotlyjs='cdn')
+	# print(f'A plot with the waveforms can be found in {path_to_plot}')

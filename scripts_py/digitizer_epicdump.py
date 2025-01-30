@@ -1,6 +1,6 @@
 from flask import Flask, send_file
 from CAENpy.CAENDigitizer import CAEN_DT5742_Digitizer
-from digitizer_example_1 import configure_digitizer, convert_dicitonaries_to_data_frame
+from digitizer_example_1 import configure_digitizer, convert_dictionaries_to_data_frame
 import pandas as pd
 import plotly.express as px
 from pathlib import Path
@@ -96,13 +96,14 @@ def data_acquisition_and_processing(digitizer):
             with digitizer:
                 time.sleep(0.5)
                 waveforms = digitizer.get_waveforms()
+                print(waveforms)
 
             if not waveforms:
                 print("WARNING: No waveforms acquired. Retrying...")
                 continue
 
             # Convert data into DataFrame
-            data = convert_dicitonaries_to_data_frame(waveforms)
+            data = convert_dictionaries_to_data_frame(waveforms)
 
             # Update the 'n_event' index with the current event number
             data = data.reset_index()  # Reset existing index
@@ -114,18 +115,20 @@ def data_acquisition_and_processing(digitizer):
 
             # Filter only the data from channel CH0
             ch0_data = data.loc[(slice(None), 'CH0'), :]
+            ch1_data = data.loc[(slice(None), 'CH1'), :]
 
             # Apply threshold filter
             ch0_data_above_threshold = ch0_data[ch0_data['Amplitude (V)'] > THRESHOLD]
+            ch1_data_above_threshold = ch1_data[ch1_data['Amplitude (V)'] > THRESHOLD]
 
-            if not ch0_data_above_threshold.empty:
+            #if not ch0_data_above_threshold.empty:
                 # Save the filtered data in TXT and ROOT formats
-                save_waveforms_to_txt(ch0_data_above_threshold, OUTPUT_TXT)
+                #save_waveforms_to_txt(ch0_data_above_threshold, OUTPUT_TXT)
                 # save_waveforms_to_root(ch0_data_above_threshold, OUTPUT_ROOT)
 
             # Combine CH0 data and trigger data for the plot
             trigger_data = data.loc[(slice(None), 'trigger_group_1'), :]
-            combined_data = pd.concat([ch0_data_above_threshold, trigger_data])
+            combined_data = pd.concat([ch0_data_above_threshold, ch1_data_above_threshold, trigger_data])
 
             # Generate HTML plot
             generate_html_plot(combined_data, OUTPUT_HTML)
