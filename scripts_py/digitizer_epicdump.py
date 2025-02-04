@@ -1,6 +1,6 @@
 from flask import Flask, send_file
 from CAENpy.CAENDigitizer import CAEN_DT5742_Digitizer
-from digitizer_example_1 import configure_digitizer, convert_dictionaries_to_data_frame
+from set_digitizer import configure_digitizer, convert_dictionaries_to_data_frame
 import pandas as pd
 import plotly.express as px
 from pathlib import Path

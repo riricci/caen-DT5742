@@ -25,23 +25,7 @@ def configure_digitizer(digitizer: CAEN_DT5742_Digitizer, freq=5000, BLT=1, DC_o
     for ch in [0, 1]:
         digitizer.set_trigger_polarity(channel=ch, edge='rising')
     
-    # def set_ext_trigger_input_mode(self, mode:str):
-	# 	"""Enable or disable the external trigger (TRIG IN).
-		
-	# 	Arguments
-	# 	---------
-	# 	mode: str
-	# 		One of `'disabled'`, `'extout only'`, `'acquisition only'`,
-	# 		`'acquisition and extout'`.
-	# 	"""
-	# 	if mode not in CAEN_DGTZ_TriggerMode:
-	# 		raise ValueError(f'`mode` must be one of {set(CAEN_DGTZ_TriggerMode.keys())}, received {repr(mode)}. ')
-	# 	code = libCAENDigitizer.CAEN_DGTZ_SetExtTriggerInputMode(
-	# 		self._get_handle(), 
-	# 		c_long(CAEN_DGTZ_TriggerMode[mode])
-	# 	)
-	# 	check_error_code(code)
-
+    
 def convert_dictionaries_to_data_frame(waveforms: dict):
     data = []
     for n_event, event_waveforms in enumerate(waveforms):
@@ -54,7 +38,6 @@ def convert_dictionaries_to_data_frame(waveforms: dict):
             df.set_index(['n_event', 'n_channel'], inplace=True)
             data.append(df)
     return pandas.concat(data) if data else pandas.DataFrame()
-
 
 def get_corrected_waveforms(digitizer: CAEN_DT5742_Digitizer, get_time=True, get_ADCu_instead_of_volts=False, DRS4_correction = True) -> list:
     try:
@@ -99,63 +82,27 @@ def get_corrected_waveforms(digitizer: CAEN_DT5742_Digitizer, get_time=True, get
         digitizer._freeEvent()
         digitizer._freeBuffer()
     
+def start_continuous_software_trigger(digitizer: CAEN_DT5742_Digitizer):
+    """
+    Configura il digitizer per il trigger software continuo e avvia l'acquisizione.
+    
+    :param digitizer: Istanza del digitizer (CAEN_DT5742_Digitizer).
+    """
+    if not isinstance(digitizer, CAEN_DT5742_Digitizer):
+        raise TypeError("L'oggetto passato non è un'istanza valida del digitizer.")
 
+    # Disabilita il trigger esterno (TRIG IN)
+    digitizer.set_ext_trigger_input_mode('disabled')
 
+    # Disabilita il Fast Trigger
+    digitizer.set_fast_trigger_mode(False)
+    print("Fast Trigger disabilitato.")
 
-if __name__ == '__main__':
-    # Connecting to digitizer
-    d = CAEN_DT5742_Digitizer(LinkNum=0)
-    print('Connected with:', d.idn)
+    # Avvia l'acquisizione software
+    digitizer._start_acquisition()
+    
+    print("Acquisizione avviata con trigger software continuo.")
+    
+    import numpy as np
+import matplotlib.pyplot as plt
 
-    # Configuring digitizer
-    configure_digitizer(d, 5000)
-    d.set_max_num_events_BLT(1)  # Configura la massima capacità del buffer interno.
-
-    # Data acquisition
-    n_events = 0
-    ACQUIRE_AT_LEAST_THIS_NUMBER_OF_EVENTS = 2222
-    data_frames = []
-    sampling_frequency = 5000 #5000  # check whether this is in conflict with the first function
-
-    with d:  # acquiring frames with digitizer
-        print('Digitizer is enabled! Acquiring data...')
-        while n_events < ACQUIRE_AT_LEAST_THIS_NUMBER_OF_EVENTS:
-            time.sleep(0.05)
-            waveforms = d.get_waveforms()  # Acquisisci i dati
-            this_readout_n_events = len(waveforms)
-            n_events += this_readout_n_events
-            data_frame = convert_dictionaries_to_data_frame(waveforms)
-
-            # adding time stamp
-            data_frame['Time (s)'] += (n_events - this_readout_n_events) * 1024 / sampling_frequency
-            data_frames.append(data_frame)
-
-            print(f'{n_events} out of {ACQUIRE_AT_LEAST_THIS_NUMBER_OF_EVENTS} were acquired.')
-
-        print(f'A total of {n_events} events were acquired. Stopping digitizer.')
-
-    # create a pandas data frame with time and waves
-    full_data = pandas.concat(data_frames)
-
-    # checking data
-    print('Acquired data is:')
-    print(full_data)
-
-    # Creating plot
-    fig = px.line(
-        title='CAEN Digitizer Waveforms (CH0 and TR0)',
-        data_frame=full_data.reset_index(),
-        x='Time (s)',
-        y='Amplitude (V)',
-        color='n_channel',
-        markers=True
-    )
-    fig.show()
-
-    # Save data to file `CH0` e `TR0` --> to  be checked
-    if not full_data.empty:
-        output_path = 'filtered_waveforms_CH0_TR0.txt'
-        full_data.to_csv(output_path, sep='\t')
-        print(f'Data for CH0 and TR0 saved to {output_path}')
-    else:
-        print('No data acquired for CH0 or TR0.')

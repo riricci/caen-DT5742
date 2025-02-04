@@ -12,7 +12,7 @@ import pandas as pd
 from datetime import datetime
 from pathlib import Path
 from CAENpy.CAENDigitizer import CAEN_DT5742_Digitizer
-from digitizer_example_1 import configure_digitizer, convert_dictionaries_to_data_frame, get_corrected_waveforms
+from set_digitizer import configure_digitizer, convert_dictionaries_to_data_frame, get_corrected_waveforms
 
 # Initial Configuration
 THRESHOLD = -0.5

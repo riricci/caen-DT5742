@@ -2,7 +2,7 @@ from CAENpy.CAENDigitizer import CAEN_DT5742_Digitizer
 import pandas
 import plotly.express as px
 import time
-from digitizer_example_1 import configure_digitizer, convert_dicitonaries_to_data_frame
+from set_digitizer import configure_digitizer, convert_dicitonaries_to_data_frame
 from pathlib import Path
 
 if __name__ == '__main__':
