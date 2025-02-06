@@ -30,11 +30,14 @@ OPEN USB 0 0
 # For 742 family the options available are only 1024, 520, 256 and 136
 RECORD_LENGTH  1024
 
+MAX_NUM_EVENTS_BLT      2
+USE_INTERRUPT           2
+
 # POST_TRIGGER: post trigger size in percent of the whole acquisition window
 # options: 0 to 100
 # For x742 there is a delay of about 42 nsec on Fast Trigger TR, and about 115 nsec on TRG-IN; 
 # the post trigger is added to this delay  
-POST_TRIGGER  50
+POST_TRIGGER  0
 
 #PULSE_POLARITY: input signal polarity.
 #options: POSITIVE, NEGATIVE
@@ -77,7 +80,7 @@ ENABLED_FAST_TRIGGER_DIGITIZING		YES
 # CORRECTION_LEVEL 7 AUTO
 # Manual Corrections with Digitizer's Flash tables for group 1 and with custom tables for the other groups:
 # CORRECTION_LEVEL 7 13 Table_gr0 Table_gr2 Table_gr3
-CORRECTION_LEVEL AUTO
+CORRECTION_LEVEL 7 AUTO 
 
 # Set the DRS4 Chip Frequency (for X742 boards only)
 # Values:
@@ -152,8 +155,9 @@ DC_OFFSET              0
 
 [0]
 ENABLE_INPUT           YES
-DC_OFFSET              10
-GRP_CH_DC_OFFSET       3,0,0,0,0,0,0,0 
+DC_OFFSET              0
+GRP_CH_DC_OFFSET       0,0,0,0,0,0,0,0 
+
 
 [1]
 
