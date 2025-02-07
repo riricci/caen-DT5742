@@ -1,9 +1,12 @@
 import sys
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QHBoxLayout, QWidget, QVBoxLayout, QPushButton, QLabel, QFrame
-import pyqtgraph as pg
-from rwave import rwaveclient
 import threading
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+from PyQt5.QtWidgets import QApplication, QHBoxLayout, QWidget, QVBoxLayout, QPushButton, QLabel, QFrame
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT  # Import della toolbar per Qt5
+from rwave import rwaveclient
 
 host = 'localhost'
 port = 30001
@@ -11,125 +14,132 @@ port = 30001
 class OscilloscopeApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.host = 'localhost'
-        self.port = 30001
+        self.host = host
+        self.port = port
         self.current_frequency = 750
-        self.channel_visibility = {0: True, 1: True}  # Track visibility of channels
+        self.channel_visibility = {0: True, 1: True}
         self.latest_data = None
+        self.current_frame = 0
+        self.is_running = True  # Flag to control the animation
         self.initUI()
-        pg.setConfigOptions(antialias=False, useOpenGL=True)  # Disable antialiasing and enable OpenGL for performance
+        self.init_plot()
         
     def set_frequency(self, freq):
         self.current_frequency = freq
         threading.Thread(target=self.configure_digitizer, daemon=True).start()
-
+    
     def configure_digitizer(self):
         with rwaveclient(self.host, self.port, verbose=True) as rwc:
             if rwc is not None:
                 rwc.send_cmd(f'sampling {self.current_frequency}')
-                print(f"Configured digitizer to {self.current_frequency} MHz")    
                 rwc.send_cmd('grmask 0x1')
                 rwc.send_cmd('chmask 0x0003')
-
+    
     def toggle_channel(self, ch):
         self.channel_visibility[ch] = not self.channel_visibility[ch]
-        if self.latest_data:
-            self.plotData(self.latest_data)
     
     def initUI(self):
         layout = QVBoxLayout()
         self.setWindowTitle("Digitizer Control")
         self.setGeometry(100, 100, 900, 600)
         
-        # Graph widget
-        self.plotWidget = pg.PlotWidget()
-        self.plotWidget.setBackground('black')
-        self.plotWidget.showGrid(x=True, y=True)
-        
-        # Configure axes
-        self.plotWidget.setLabel('left', 'Amplitude')
-        self.plotWidget.setLabel('bottom', 'Samples')
-        
-        layout.addWidget(self.plotWidget)
-        
-        # Button layout
-        control_layout = QHBoxLayout()
-        
         self.button = QPushButton('Start Acquisition')
+        self.button.setStyleSheet("background-color: #4CAF50; color: white; font-size: 14px; border-radius: 10px; padding: 10px;")
         self.button.clicked.connect(self.startAcquisition)
-        control_layout.addWidget(self.button)
+        layout.addWidget(self.button)
         
         self.freq_buttons = []
-        for freq in [750, 1000, 2500, 5000]:  # Frequencies in MHz
+        for freq in [750, 1000, 2500, 5000]:
             btn = QPushButton(f"{freq} MHz", self)
+            btn.setStyleSheet("background-color: #008CBA; color: white; font-size: 14px; border-radius: 10px; padding: 10px;")
             btn.clicked.connect(lambda _, f=freq: self.set_frequency(f))
             self.freq_buttons.append(btn)
-            control_layout.addWidget(btn)
+            layout.addWidget(btn)
         
-        layout.addLayout(control_layout)
-        
-        # Channel toggle buttons
-        self.channel_buttons = {}
-        ch_layout = QHBoxLayout()
-        for ch in [0, 1]:
-            btn = QPushButton(f"Toggle Ch {ch}", self)
-            btn.clicked.connect(lambda _, c=ch: self.toggle_channel(c))
-            self.channel_buttons[ch] = btn
-            ch_layout.addWidget(btn)
-        
-        layout.addLayout(ch_layout)
-        
-        # Separator line
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(separator)
-        
-        # Status label
         self.status_label = QLabel("Status: Ready")
         layout.addWidget(self.status_label)
+        
+        # Creazione della canvas di matplotlib
+        self.canvas = FigureCanvas(plt.figure(facecolor='black'))
+        
+        # Aggiungi la toolbar sopra il canvas
+        self.toolbar = NavigationToolbar2QT(self.canvas, self)
+        layout.addWidget(self.toolbar)  # Aggiungi la toolbar al layout
+        layout.addWidget(self.canvas)  # Aggiungi la canvas sotto la toolbar
+        
+        # Aggiungi i pulsanti "Next Frame" e "Stop Frame"
+        self.next_frame_button = QPushButton('Next Frame', self)
+        self.next_frame_button.setStyleSheet("background-color: #f1c232; color: black; font-size: 14px; border-radius: 10px; padding: 10px;")
+        self.next_frame_button.clicked.connect(self.next_frame)
+        layout.addWidget(self.next_frame_button)
+        
+        self.stop_frame_button = QPushButton('Stop Frame', self)
+        self.stop_frame_button.setStyleSheet("background-color: #e04e56; color: white; font-size: 14px; border-radius: 10px; padding: 10px;")
+        self.stop_frame_button.clicked.connect(self.stop_frame)
+        layout.addWidget(self.stop_frame_button)
         
         self.setLayout(layout)
     
     def startAcquisition(self):
         self.button.setEnabled(False)
         self.status_label.setText("Status: Acquiring Data...")
-        data = self.acquireData()
-        if data:
-            self.plotData(data)
+        self.latest_data = self.acquireData()
         self.button.setEnabled(True)
         self.status_label.setText("Status: Ready")
+        self.ani.event_source.start()
     
     def acquireData(self):
-        with rwaveclient(host, port, verbose=True) as rwc:
+        with rwaveclient(self.host, self.port, verbose=True) as rwc:
             if rwc is None:
                 return None
-            # Configure acquisition
             rwc.send_cmd("start")
             rwc.send_cmd('swtrg 1024')
             rwc.send_cmd('readout')
             rwc.send_cmd('download')
             data = rwc.download()
             rwc.send_cmd('stop')
-        
         return data
     
-    def plotData(self, data):
-        self.latest_data = data  # Store latest data for toggling
-        self.plotWidget.clear()
-        colors = ['yellow', 'cyan']
-        
-        if not data:
-            return
-        
-        event = data[0]  # First acquired event
-        x = np.arange(len(event[0]))
-        
-        for ch, color in zip(event.keys(), colors):
-            if self.channel_visibility.get(ch, True):  # Check visibility
-                y = event[ch]
-                self.plotWidget.plot(x, y, pen=pg.mkPen(color, width=1), name=f'Channel {ch}', downsample=10, autoDownsample=True)
+    def init_plot(self):
+        self.ax = self.canvas.figure.add_subplot(111, facecolor='black')
+        self.x_data = np.arange(1024)
+        self.lines = {}
+        for ch, color in zip([0, 1], ['yellow', 'cyan']):
+            self.lines[ch], = self.ax.plot(self.x_data, np.zeros(1024), label=f'ch-{ch}', color=color)
+        self.ax.set_ylim(0, 4096)
+        self.ax.set_xlabel("Samples", color='white')
+        self.ax.set_ylabel("Amplitude", color='white')
+        self.ax.set_title("Oscilloscope Data", color='white')
+        self.ax.grid(color='gray')
+        self.ax.legend()
+        self.ax.tick_params(axis='both', colors='white')  # Add this line to change the color of ticks
+        self.canvas.figure.tight_layout()
+        self.canvas.figure.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+        self.ani = animation.FuncAnimation(self.canvas.figure, self.update_plot, interval=100, blit=False, repeat=True)
+        self.ani.event_source.stop()
 
+    def next_frame(self):
+        """Go to the next frame manually."""
+        if self.latest_data is not None:
+            self.current_frame = (self.current_frame + 1) % len(self.latest_data)
+            self.update_plot(None)  # Update the plot manually
+    
+    def stop_frame(self):
+        """Stop the automatic frame update."""
+        self.ani.event_source.stop()
+        self.is_running = False
+    
+    def update_plot(self, frame):
+        if self.latest_data is not None:
+            event = self.latest_data[self.current_frame]
+            for ch in [0, 1]:
+                if self.channel_visibility[ch]:
+                    self.lines[ch].set_ydata(event[ch])
+            self.ax.set_title(f'Frame {self.current_frame}', color='white')
+            self.current_frame = (self.current_frame + 1) % len(self.latest_data)
+            self.canvas.draw()
+
+        
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = OscilloscopeApp()
