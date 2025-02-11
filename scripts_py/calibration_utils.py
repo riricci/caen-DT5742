@@ -11,22 +11,26 @@ TREE_NAME = "calibration_tree"
 
 # pulser settings 
 ########################################################
-
-def configure_pulser_calib(DC_offset):
-    """Configuring pulser for calibration loading DC ARB and setting DCOFFS to 0 V."""
-    cmd = f"/eu/aimtti/aimtti-cmd.py --address aimtti-tgp3152-00 --cmd 'WAVE ARB"
-    cmd = f"/eu/aimtti/aimtti-cmd.py --address aimtti-tgp3152-00 --cmd 'ARBLOAD DC"
-    cmd = f"/eu/aimtti/aimtti-cmd.py --address aimtti-tgp3152-00 --cmd 'DCOFFS {DC_offset}'"
+def configure_pulser_calib():
+    """Configures pulser for calibration by setting ARB mode and initializing DC offset."""
+    cmds = [
+        "/eu/aimtti/aimtti-cmd.py --address aimtti-tgp3152-00 --cmd 'WAVE ARB'",
+        "/eu/aimtti/aimtti-cmd.py --address aimtti-tgp3152-00 --cmd 'ARBLOAD DC'",
+        "/eu/aimtti/aimtti-cmd.py --address aimtti-tgp3152-00 --cmd 'DCOFFS 0'"
+    ]
+    for cmd in cmds:
+        subprocess.run(cmd, shell=True, check=True)
+    time.sleep(0.1)
 
 def set_pulser_voltage(voltage):
-    """Set the pulser DC offset using a bash command."""
-    # cmd = f"/eu/aimtti/aimtti-cmd.py --address aimtti-tgp3152-20 --cmd 'DCOFFS {voltage}'"
+    """Sets the pulser DC offset."""
     cmd = f"/eu/aimtti/aimtti-cmd.py --address aimtti-tgp3152-00 --cmd 'DCOFFS {voltage}'"
     subprocess.run(cmd, shell=True, check=True)
-    time.sleep(1)  # Wait for voltage to stabilize
+    time.sleep(0.1)  # Allow voltage stabilization
 
-# calibration data taking
+# data taking
 ########################################################
+
 def take_calibration_data(voltages):
     """Acquire calibration data for all voltages."""
     data_dict = {"voltage": [], "event": [], "ch0_waveform": [], "ch1_waveform": []}
@@ -60,11 +64,8 @@ def convert_calibration_data(data_dict):
 
 # ROOT file writing using uproot
 ########################################################
-def save_calibration_to_root(data_dict, filename):
-    """Save collected calibration data to a ROOT file."""
-    if not data_dict:
-        print("No data received!")
-        return
+def save_to_root(data_dict, filename):
+    """Saves the collected [calibration] data to a ROOT file."""
     with uproot.recreate(filename) as file:
         file[TREE_NAME] = data_dict
     print(f"Calibration data saved to {filename}")
@@ -95,18 +96,18 @@ def calc_calibration_parameters(voltage_data, ch_waveform):
     
 # plotting calibration curves for the first 4 cells for ch1
 ########################################################
-def plot_calibration_ch1(voltage_data, ch1_waveform, calibration_params, num_cells_to_plot=4):
-    """Plots calibration for the first 4 cells for ch1."""
-    plt.figure(figsize=(10, 6))
-    for cell in range(num_cells_to_plot):
-        adc_values = ch1_waveform[:, cell]
-        slope, intercept = calibration_params[cell]
-        
-        plt.scatter(voltage_data, adc_values, label=f'Cell {cell} Data')
-        plt.plot(voltage_data, slope * voltage_data + intercept, label=f'Cell {cell} Fit')
+def plot_adc_vs_voltage(voltage_data, ch1_waveform):
+    """Plots ADC vs Voltage for the first cell."""
+    adc_values = ch1_waveform[:, 0]  # First cell only
     
+    plt.scatter(voltage_data, adc_values, label='Cell 0 Data', c='black', s=2)
+    # do fit and estimate regression parameters
+    slope, intercept, _, _, _ = scipy.stats.linregress(voltage_data, adc_values)
+    # plot the fit
+    plt.plot(voltage_data, slope*voltage_data + intercept, label=f'Cell 0 Fit (slope={slope:.2f}, intercept={intercept:.2f})', c='red')
     plt.xlabel('Voltage (V)')
     plt.ylabel('ADC Value')
-    plt.title('Calibration for first 4 cells (ch1)')
+    plt.title('ADC vs Voltage for Cell 0')
     plt.legend()
     plt.show()
+
