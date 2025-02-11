@@ -18,24 +18,39 @@ if __name__ == "__main__":
     data_dict = {"voltage": [], "event": [], "ch1_waveform": []}
     
     configure_pulser_calib()
+    
     for v in VOLTAGES:
         set_pulser_voltage(v)
+        
+        # Lista per raccogliere le waveform per la media
+        all_ch1_waveforms = []
+        
+        # Acquisizione di 1024 trigger (eventi)
         data = acquire_data()
         
         if data is None:
             print(f"Failed to acquire data for voltage {v}V")
             continue
         
+        # Raccogli tutte le waveform per ch1
         for i, event in enumerate(data):
-            data_dict["voltage"].append(v)
-            data_dict["event"].append(i)
-            data_dict["ch1_waveform"].append(event.get(1, np.zeros(1024)))
+            ch1_waveform = event.get(1, np.zeros(1024))  # Canale 1
+            all_ch1_waveforms.append(ch1_waveform)
+        
+        # Calcolare la media delle waveform per questo valore di tensione
+        mean_ch1_waveform = np.mean(all_ch1_waveforms, axis=0)
+        
+        # Aggiungi la media al dizionario
+        data_dict["voltage"].append(v)
+        data_dict["event"].append(0)  # Solo un evento per ogni tensione
+        data_dict["ch1_waveform"].append(mean_ch1_waveform)
     
-    # Convert lists to numpy arrays
+    # Convertire le liste in numpy array
     for key in data_dict:
         data_dict[key] = np.array(data_dict[key], dtype=np.float32)
     
+    # Salvare i dati su ROOT
     save_to_root(data_dict, OUTPUT_FILE)
     
-    # Generate control plot
+    # Generare il grafico con le waveform mediate
     plot_adc_vs_voltage(data_dict["voltage"], data_dict["ch1_waveform"])
