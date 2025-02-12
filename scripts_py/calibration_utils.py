@@ -28,11 +28,11 @@ def configure_pulser_calib():
         subprocess.run(cmd, shell=True, check=True)
     time.sleep(0.1)
 
-def set_pulser_voltage(voltage):
+def set_pulser_voltage(voltage, sleep):
     """Sets the pulser DC offset."""
     cmd = f"/eu/aimtti/aimtti-cmd.py --address aimtti-tgp3152-00 --cmd 'DCOFFS {voltage}'"
     subprocess.run(cmd, shell=True, check=True)
-    time.sleep(0.5)  # Allow voltage stabilization
+    time.sleep(sleep)  # Allow voltage stabilization
 
 
 # data conversion to numpy arrays
@@ -98,19 +98,24 @@ def take_calibration_data():
         help="Step size for voltage increments (default: 0.15V)."
     )
     parser.add_argument(
+        "--sleep", type=float, default=0.1,
+        help="Sleep time for voltage stabilization (default: 1s)."
+    )
+    parser.add_argument(
         "--output_file", type=str, default="calibration_data.root",
         help="Output ROOT file to store calibration data (default: calibration_data.root)."
     )
     args = parser.parse_args()
 
-    voltages = np.arange(args.vmin, args.vmax + args.step, args.step)  # Include max if possible
+    voltages = np.arange(args.vmin, args.vmax + args.step, args.step)
+    s = args.sleep 
     output_file = args.output_file
 
     data_dict = {"voltage": [], "event": [], "ch1_waveform": []}
 
     configure_pulser_calib()
     for v in voltages:
-        set_pulser_voltage(v)
+        set_pulser_voltage(v,s)
         all_ch1_waveforms = []
         data = acquire_data()
         
@@ -131,23 +136,36 @@ def take_calibration_data():
     save_to_root(data_dict, output_file)
     plot_adc_vs_voltage(data_dict["voltage"], data_dict["ch1_waveform"])
 
+    # back to DC=0 V for other uses
+    set_pulser_voltage(0, s)
 
     
 # plotting calibration curves for the first 4 cells for ch1
 ########################################################
 # used only as control plot for now - used at the end of data taking
+
 def plot_adc_vs_voltage(voltage_data, ch1_waveform):
-    """Plots ADC vs Voltage for the first cell."""
+    """Plots ADC vs Voltage for the first cell, including fit parameters and chi² in the legend."""
     adc_values = ch1_waveform[:, 0]  # First cell only
-    
-    plt.scatter(voltage_data, adc_values, label='Cell 0 Data', c='black', s=2)
-    # do fit and estimate regression parameters
+    # fit
     slope, intercept, _, _, _ = scipy.stats.linregress(voltage_data, adc_values)
-    # plot the fit
-    plt.plot(voltage_data, slope*voltage_data + intercept, label=f'Cell 0 Fit (slope={slope:.2f}, intercept={intercept:.2f})', c='red', linewidth=0.5)
+    fitted_values = slope * voltage_data + intercept
+    # chi2/ndof (manually done, not from scipy.stats.linregress!!)
+    residuals = adc_values - fitted_values
+    chi2 = np.sum((residuals ** 2) / fitted_values)  # Standard definition of chi²
+    ndof = len(voltage_data) - 2  # Degrees of freedom (N data points - 2 fit parameters)
+    chi2_reduced = chi2 / ndof if ndof > 0 else np.nan  # Avoid division by zero
+    
+    # Plot 
+    plt.scatter(voltage_data, adc_values, label='Cell 0 Data', c='black', s=10)
+    # Fit
+    plt.plot(voltage_data, fitted_values, label=f'Fit: y = {slope:.2f}x + {intercept:.2f}\n$\\chi^2_{{red}}$ = {chi2_reduced:.2f}', 
+             c='red', linewidth=0.8)
+    # labelsssss
     plt.xlabel('Voltage (V)')
     plt.ylabel('ADC Value')
     plt.title('ADC vs Voltage for Cell 0')
     plt.legend()
     plt.show()
+
 
