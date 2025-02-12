@@ -1,4 +1,9 @@
 #!/bin/bash
+# 2025-02-12, Riccardo Ricci
+# usage:  
+#   source configure.sh # to activate the virtual environment
+#   source configure.sh --servers # to activate the virtual environment and start the servers
+
 
 # Activating environment for Python
 echo "Activating the virtual environment..."
