@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import time
 from rwave import rwaveclient
 from rwaveclient_root import acquire_data
+import argparse
 
 HOST = 'localhost'
 PORT = 30001
@@ -31,45 +32,7 @@ def set_pulser_voltage(voltage):
     """Sets the pulser DC offset."""
     cmd = f"/eu/aimtti/aimtti-cmd.py --address aimtti-tgp3152-00 --cmd 'DCOFFS {voltage}'"
     subprocess.run(cmd, shell=True, check=True)
-    time.sleep(0.1)  # Allow voltage stabilization
-
-# data taking
-########################################################
-def take_calibration_data(voltages, output_file):
-    """Acquire calibration data for all voltages."""
-    data_dict = {"voltage": [], "event": [], "ch1_waveform": []}
-
-    configure_pulser_calib()
-    for v in voltages:
-        set_pulser_voltage(v)
-        # List to collect waveforms for averaging
-        all_ch1_waveforms = []
-        # Acquire 1024 triggers for each voltage
-        data = acquire_data()
-        
-        if data is None:
-            print(f"Failed to acquire data for voltage {v}V")
-            continue
-        # Collect all waveforms for ch1
-        for i, event in enumerate(data):
-            ch1_waveform = event.get(1, np.zeros(1024))  # Channel 1
-            all_ch1_waveforms.append(ch1_waveform)   
-        # Compute the average of the waveforms for this voltage
-        mean_ch1_waveform = np.mean(all_ch1_waveforms, axis=0)
-      
-        # Append the averaged waveform to the data dictionary
-        data_dict["voltage"].append(v)
-        data_dict["event"].append(0)  # Only one event per voltage
-        data_dict["ch1_waveform"].append(mean_ch1_waveform)
-    
-    # Convert lists to numpy arrays
-    for key in data_dict:
-        data_dict[key] = np.array(data_dict[key], dtype=np.float32)
-    # Save the data to a ROOT file
-    save_to_root(data_dict, output_file)
-    # Generate the coontrol plot with averaged waveforms
-    plot_adc_vs_voltage(data_dict["voltage"], data_dict["ch1_waveform"])
-
+    time.sleep(0.5)  # Allow voltage stabilization
 
 
 # data conversion to numpy arrays
@@ -80,8 +43,7 @@ def convert_calibration_data(data_dict):
         data_dict[key] = np.array(data_dict[key], dtype=np.float32)
     return data_dict
 
-
-# ROOT file writing using uproot
+# ROOT file writing using uproot for any dictionary
 ########################################################
 def save_to_root(data_dict, filename):
     """Saves the collected [calibration] data to a ROOT file."""
@@ -89,29 +51,86 @@ def save_to_root(data_dict, filename):
         file[TREE_NAME] = data_dict
     print(f"Calibration data saved to {filename}")
 
-# to be checked - not used for now
-def load_calib_data_from_root(filename, tree_name="calibration_tree"):
-    """Load data from root doing conversion to numpy."""
-    with uproot.open(filename) as file:
-        tree = file[tree_name]
-        voltage_data = tree["voltage"].array(library="np")  # Converte in NumPy direttamente
-        ch0_data = tree["ch0_waveform"].array(library="np")
-        ch1_data = tree["ch1_waveform"].array(library="np")
-    return voltage_data, ch0_data, ch1_data
+# to be checked/updated - not used for now
+# def load_calib_data_from_root(filename, tree_name="calibration_tree"):
+#     """Load data from root doing conversion to numpy."""
+#     with uproot.open(filename) as file:
+#         tree = file[tree_name]
+#         voltage_data = tree["voltage"].array(library="np")  # Converte in NumPy direttamente
+#         ch0_data = tree["ch0_waveform"].array(library="np")
+#         ch1_data = tree["ch1_waveform"].array(library="np")
+#     return voltage_data, ch0_data, ch1_data
 
 # p0 and p1 calibration parameters extraction and writing to ROOT file
+# TO BE CHECKED/UPDATED
 ########################################################
-def calc_calibration_parameters(voltage_data, ch_waveform):
-    """Performs calibration for each one of the 1024 cells."""
-    num_cells = ch_waveform.shape[1]  # Dovrebbe essere 1024
-    calibration_params = []
+# def calc_calibration_parameters(voltage_data, ch_waveform):
+#     """Performs calibration for each one of the 1024 cells."""
+#     num_cells = ch_waveform.shape[1]  # Dovrebbe essere 1024
+#     calibration_params = []
     
-    for cell in range(num_cells):
-        adc_values = ch_waveform[:, cell]  # ADC per la cella specifica
-        slope, intercept, _, _, _ = scipy.stats.linregress(voltage_data, adc_values)
-        calibration_params.append((slope, intercept))
+#     for cell in range(num_cells):
+#         adc_values = ch_waveform[:, cell]  # ADC per la cella specifica
+#         slope, intercept, _, _, _ = scipy.stats.linregress(voltage_data, adc_values)
+#         calibration_params.append((slope, intercept))
     
-    return np.array(calibration_params)  # Restituisce una lista di (slope, intercept) per cella
+#     return np.array(calibration_params)  # Restituisce una lista di (slope, intercept) per cella
+
+
+# calibration data taking
+########################################################
+def take_calibration_data():
+    """Acquire calibration data using argparse to set parameters dynamically."""
+    parser = argparse.ArgumentParser(
+        description="Calibration data acquisition.",
+        usage="python calibration_script.py --vmin MIN --vmax MAX --step STEP --output_file filename.root"
+    )
+    parser.add_argument(
+        "--vmin", type=float, default=-0.4,
+        help="Minimum voltage for calibration (default: -0.4V)."
+    )
+    parser.add_argument(
+        "--vmax", type=float, default=0.4,
+        help="Maximum voltage for calibration (default: 0.4V)."
+    )
+    parser.add_argument(
+        "--step", type=float, default=0.15,
+        help="Step size for voltage increments (default: 0.15V)."
+    )
+    parser.add_argument(
+        "--output_file", type=str, default="calibration_data.root",
+        help="Output ROOT file to store calibration data (default: calibration_data.root)."
+    )
+    args = parser.parse_args()
+
+    voltages = np.arange(args.vmin, args.vmax + args.step, args.step)  # Include max if possible
+    output_file = args.output_file
+
+    data_dict = {"voltage": [], "event": [], "ch1_waveform": []}
+
+    configure_pulser_calib()
+    for v in voltages:
+        set_pulser_voltage(v)
+        all_ch1_waveforms = []
+        data = acquire_data()
+        
+        if data is None:
+            print(f"Failed to acquire data for voltage {v}V")
+            continue
+
+        for i, event in enumerate(data):
+            ch1_waveform = event.get(1, np.zeros(1024))  # Channel 1
+            all_ch1_waveforms.append(ch1_waveform)   
+
+        mean_ch1_waveform = np.mean(all_ch1_waveforms, axis=0)
+        data_dict["voltage"].append(v)
+        data_dict["event"].append(0)  
+        data_dict["ch1_waveform"].append(mean_ch1_waveform)
+
+    data_dict = convert_calibration_data(data_dict)
+    save_to_root(data_dict, output_file)
+    plot_adc_vs_voltage(data_dict["voltage"], data_dict["ch1_waveform"])
+
 
     
 # plotting calibration curves for the first 4 cells for ch1
