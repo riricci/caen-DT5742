@@ -7,6 +7,7 @@ import time
 from rwave import rwaveclient
 from rwaveclient_root import acquire_data
 import argparse
+from matplotlib.backends.backend_pdf import PdfPages
 
 HOST = 'localhost'
 PORT = 30001
@@ -83,33 +84,23 @@ def take_calibration_data():
     """Acquire calibration data using argparse to set parameters dynamically."""
     parser = argparse.ArgumentParser(
         description="Calibration data acquisition.",
-        usage="python calibration_script.py --vmin MIN --vmax MAX --step STEP --output_file filename.root"
+        usage="python calibration_script.py --vmin MIN --vmax MAX --step STEP --output_file filename.root --plot_cell CELL --save_pdf"
     )
-    parser.add_argument(
-        "--vmin", type=float, default=-0.4,
-        help="Minimum voltage for calibration (default: -0.4V)."
-    )
-    parser.add_argument(
-        "--vmax", type=float, default=0.4,
-        help="Maximum voltage for calibration (default: 0.4V)."
-    )
-    parser.add_argument(
-        "--step", type=float, default=0.15,
-        help="Step size for voltage increments (default: 0.15V)."
-    )
-    parser.add_argument(
-        "--sleep", type=float, default=0.1,
-        help="Sleep time for voltage stabilization (default: 1s)."
-    )
-    parser.add_argument(
-        "--output_file", type=str, default="calibration_data.root",
-        help="Output ROOT file to store calibration data (default: calibration_data.root)."
-    )
+    parser.add_argument("--vmin", type=float, default=-0.4, help="Minimum voltage for calibration (default: -0.4V).")
+    parser.add_argument("--vmax", type=float, default=0.4, help="Maximum voltage for calibration (default: 0.4V).")
+    parser.add_argument("--step", type=float, default=0.15, help="Step size for voltage increments (default: 0.15V).")
+    parser.add_argument("--sleep", type=float, default=0.1, help="Sleep time for voltage stabilization (default: 0.1s).")
+    parser.add_argument("--output_file", type=str, default="calibration_data.root", help="Output ROOT file.")
+    parser.add_argument("--plot_cell", type=int, default=0, help="Cell index to plot (default: 0).")
+    parser.add_argument("--save_pdf", action="store_true", help="Save plots of all cells to a PDF file.")
+    
     args = parser.parse_args()
 
     voltages = np.arange(args.vmin, args.vmax + args.step, args.step)
     s = args.sleep 
     output_file = args.output_file
+    plot_cell = args.plot_cell
+    save_pdf = args.save_pdf
 
     data_dict = {"voltage": [], "event": [], "ch1_waveform": []}
 
@@ -132,40 +123,96 @@ def take_calibration_data():
         data_dict["event"].append(0)  
         data_dict["ch1_waveform"].append(mean_ch1_waveform)
 
+    #converting and saving data to ROOT file
     data_dict = convert_calibration_data(data_dict)
     save_to_root(data_dict, output_file)
-    plot_adc_vs_voltage(data_dict["voltage"], data_dict["ch1_waveform"])
 
+    #preparing fitting parameters
+    num_cells = len(data_dict["ch1_waveform"][0])  # 1024 celle
+    fit_params = {}
+    for cell in range(num_cells):
+        slope, intercept = fit_adc_vs_voltage(data_dict["voltage"], data_dict["ch1_waveform"], cell_idx=cell)
+        fit_params[cell] = (slope, intercept)    
+
+    # saving to .npz file and doing control plot
+    np.savez(output_file.replace(".root", "_fit_params.npz"), **{str(k): v for k, v in fit_params.items()})
+    
+    if save_pdf:
+        plot_all_cells_pdf(num_cells, data_dict, fit_params, args)
+        pass
+                
+    if plot_cell: #to be adjusted because cells go from 0 to 1023 and 0 will result as false...
+        single_plot_adc_vs_voltage(data_dict["voltage"], data_dict["ch1_waveform"], plot_cell, fit_params)
+        plt.show()
+    
     # back to DC=0 V for other uses
     set_pulser_voltage(0, s)
 
+
     
-# plotting calibration curves for the first 4 cells for ch1
+# plotting calibration curves for the selected cell for ch1
 ########################################################
 # used only as control plot for now - used at the end of data taking
 
-def plot_adc_vs_voltage(voltage_data, ch1_waveform):
-    """Plots ADC vs Voltage for the first cell, including fit parameters and chi² in the legend."""
-    adc_values = ch1_waveform[:, 0]  # First cell only
-    # fit
-    slope, intercept, _, _, _ = scipy.stats.linregress(voltage_data, adc_values)
+def fit_adc_vs_voltage(voltage_data, ch1_waveform, cell_idx=0):
+    """Fits ADC vs Voltage for a chosen cell and returns slope, intercept."""
+    adc_values = np.array(ch1_waveform)[:, cell_idx]  # select requested cell
+    slope, intercept, _, _, _ = scipy.stats.linregress(voltage_data, adc_values)    
+    return slope, intercept
+
+def single_plot_adc_vs_voltage(voltage_data, ch1_waveform, cell_idx, fit_params):
+    """Plots ADC vs Voltage for a chosen cell using precomputed fit parameters."""
+    plt.figure()  # Crea una nuova figura
+
+    adc_values = np.array(ch1_waveform)[:, cell_idx]  # Corretto anche questo!
+    slope, intercept = fit_params[cell_idx]
     fitted_values = slope * voltage_data + intercept
-    # chi2/ndof (manually done, not from scipy.stats.linregress!!)
-    residuals = adc_values - fitted_values
-    chi2 = np.sum((residuals ** 2) / fitted_values)  # Standard definition of chi²
-    ndof = len(voltage_data) - 2  # Degrees of freedom (N data points - 2 fit parameters)
-    chi2_reduced = chi2 / ndof if ndof > 0 else np.nan  # Avoid division by zero
-    
-    # Plot 
-    plt.scatter(voltage_data, adc_values, label='Cell 0 Data', c='black', s=10)
-    # Fit
-    plt.plot(voltage_data, fitted_values, label=f'Fit: y = {slope:.2f}x + {intercept:.2f}\n$\\chi^2_{{red}}$ = {chi2_reduced:.2f}', 
-             c='red', linewidth=0.8)
-    # labelsssss
+
+    # Plot
+    plt.scatter(voltage_data, adc_values, label=f'Cell {cell_idx} Data', c='black', s=10)
+    plt.plot(voltage_data, fitted_values, label=f'Fit: y = {slope:.2f}x + {intercept:.2f}', c='red', linewidth=0.8)
     plt.xlabel('Voltage (V)')
     plt.ylabel('ADC Value')
-    plt.title('ADC vs Voltage for Cell 0')
+    plt.title(f'ADC vs Voltage for Cell {cell_idx}')
     plt.legend()
-    plt.show()
+    # plt.show() # for some reason it "gives fastidio" to the pdf file writing. Debugging needed. --> separate plotting function?
 
+        
+def plot_all_cells_pdf(num_cells, data_dict, fit_params, args): 
+    
+    cells_per_page = 24 # 6 rows x 4 columns
+    cols = 4
+    rows = 6
+    num_pages = int(np.ceil(num_cells / cells_per_page)) # ceil approximates to the upper integer of the resulting division
 
+    with PdfPages(f'all_cells_plots_step{args.step}.pdf') as pdf:
+        for page in range(num_pages):
+            fig, axes = plt.subplots(rows, cols, figsize=(12, 18))
+            axes = axes.flatten() # to handle more easily the axes
+            for i in range (cells_per_page):
+                cell_idx = page * cells_per_page + i
+                if cell_idx >= num_cells:
+                    break # when done, exit the loop and finish                    
+                ax = axes[i]
+                adc_values = np.array(data_dict["ch1_waveform"])[:, cell_idx]
+                slope, intercept = fit_params[cell_idx]
+                fitted_values = slope * data_dict["voltage"] + intercept
+
+                ax.scatter(data_dict["voltage"], adc_values, color='black', s=10, label=f'Cell {cell_idx}')
+                ax.plot(data_dict["voltage"], fitted_values, color='red', linewidth=0.8)
+                ax.set_xlabel('Voltage (V)')
+                ax.set_ylabel('ADC')
+                ax.set_title(f'Cell {cell_idx}')
+                ax.legend(fontsize=8)
+                        
+                    # # we hate empty suplots, let's remove them
+                    # for j in range(i + 1, len(axes)):
+                    #     if axes[j].has_data():
+                    #         continue  # if axes has data, skip to the next one
+                    #     fig.delaxes(axes[j])
+                # finalize and close all this 
+            plt.tight_layout()
+            pdf.savefig(fig)
+            plt.close()
+
+           
