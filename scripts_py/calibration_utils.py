@@ -52,31 +52,6 @@ def save_to_root(data_dict, filename):
         file[TREE_NAME] = data_dict
     print(f"Calibration data saved to {filename}")
 
-# to be checked/updated - not used for now
-# def load_calib_data_from_root(filename, tree_name="calibration_tree"):
-#     """Load data from root doing conversion to numpy."""
-#     with uproot.open(filename) as file:
-#         tree = file[tree_name]
-#         voltage_data = tree["voltage"].array(library="np")  # Converte in NumPy direttamente
-#         ch0_data = tree["ch0_waveform"].array(library="np")
-#         ch1_data = tree["ch1_waveform"].array(library="np")
-#     return voltage_data, ch0_data, ch1_data
-
-# p0 and p1 calibration parameters extraction and writing to ROOT file
-# TO BE CHECKED/UPDATED
-########################################################
-# def calc_calibration_parameters(voltage_data, ch_waveform):
-#     """Performs calibration for each one of the 1024 cells."""
-#     num_cells = ch_waveform.shape[1]  # Dovrebbe essere 1024
-#     calibration_params = []
-    
-#     for cell in range(num_cells):
-#         adc_values = ch_waveform[:, cell]  # ADC per la cella specifica
-#         slope, intercept, _, _, _ = scipy.stats.linregress(voltage_data, adc_values)
-#         calibration_params.append((slope, intercept))
-    
-#     return np.array(calibration_params)  # Restituisce una lista di (slope, intercept) per cella
-
 
 # calibration data taking
 ########################################################
@@ -214,5 +189,21 @@ def plot_all_cells_pdf(num_cells, data_dict, fit_params, args):
             plt.tight_layout()
             pdf.savefig(fig)
             plt.close()
+    
+    
 
-           
+def plot_from_npz(npz_file):
+    """Plots ADC vs Voltage for all cells using precomputed fit parameters."""
+    fit_params = np.load(npz_file)
+    for cell in range(1024):
+        print(f'Cell: {cell}, [p1, p0]: ', fit_params[str(cell)])
+    # for cell in fit_params:
+    #     slope, intercept = fit_params[cell]
+    #     single_plot_adc_vs_voltage(data_dict["voltage"], data_dict["ch1_waveform"], cell, fit_params)
+    #     plt.show()
+
+
+
+# calibration function starting from .npz files. To be done    
+def calibrate():
+    pass
