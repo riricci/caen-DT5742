@@ -195,8 +195,37 @@ def plot_all_cells_pdf(num_cells, data_dict, fit_params, args):
 def plot_from_npz(npz_file):
     """Plots ADC vs Voltage for all cells using precomputed fit parameters."""
     fit_params = np.load(npz_file)
+    p0_list = []
+    p1_list = []
+
     for cell in range(1024):
-        print(f'Cell: {cell}, [p1, p0]: ', fit_params[str(cell)])
+        # Extracting p0 and p1 for each cell
+        p0 = fit_params[str(cell)][0]
+        p1 = fit_params[str(cell)][1]
+        # Appending them to the respective lists
+        p0_list.append(p0)
+        p1_list.append(p1)
+        
+    # Creating subplots for histograms
+    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+    fig.suptitle('Calibration Parameters Distribution')
+
+    # Histogram for p0 (Intercept)
+    axs[0].hist(p0_list, bins=100, color='blue', alpha=0.7)
+    axs[0].set_xlabel('p1')
+    axs[0].set_ylabel('Frequency')
+    axs[0].set_title('Slope')
+
+    # Histogram for p1 (Slope)
+    axs[1].hist(p1_list, bins=100, color='red', alpha=0.7)
+    axs[1].set_xlabel('p0')
+    axs[1].set_ylabel('Frequency')
+    axs[1].set_title('Incercept')
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])  # Adjust layout to make space for title
+    plt.show()
+
+
     # for cell in fit_params:
     #     slope, intercept = fit_params[cell]
     #     single_plot_adc_vs_voltage(data_dict["voltage"], data_dict["ch1_waveform"], cell, fit_params)
