@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 HOST = 'localhost'
 PORT = 30001
 
-OUTPUT_FILE = "output.root"
+OUTPUT_FILE = "waveforms.root"
 TREE_NAME = "waveform_tree"
 
 
@@ -33,27 +33,28 @@ def acquire_data():
         
         return data
 
+
+
 def save_waveforms_to_root(data, filename):
     """Saves processed waveform data into a ROOT file."""
     if data is None:
         print("No data received!")
         return
-    
     # Dictionary to store data in the correct format for uproot
-    tree_data = {"waveform_ch0": [], "waveform_ch1": [], "trigger_tag": [], "first_cell": []}
+    for ch in range(len(data[0])): # Loop over active channels
+        tree_data = {f'waveform_ch{ch}':[], "trigger_tag": [], "first_cell": []}
 
-    for event in data:
-        tree_data["waveform_ch0"].append(event[0]["waveform"])
-        tree_data["waveform_ch1"].append(event[1]["waveform"])
-        tree_data["trigger_tag"].append(event[0]["trigger_tag"])  # Store the trigger value directly
-        tree_data["first_cell"].append(event[0]["first_cell"])  # Store the first cell value directly
+        for event in data:
+            tree_data[f'waveform_ch{ch}'].append(event[ch]["waveform"])
+            tree_data["trigger_tag"].append(event[0]["trigger_tag"])  # Store the trigger value directly
+            tree_data["first_cell"].append(event[0]["first_cell"])  # Store the first cell value directly
 
-    # Convert lists to NumPy arrays
-    tree_data = {key: np.array(value) for key, value in tree_data.items()}
+        # Convert lists to NumPy arrays
+        tree_data = {key: np.array(value) for key, value in tree_data.items()}
 
-    # Write to ROOT file
-    with uproot.recreate(filename) as file:
-        file[TREE_NAME] = tree_data
+        # Write to ROOT file
+        with uproot.recreate(f'ch{ch}_{filename}') as file:
+            file[TREE_NAME] = tree_data
 
 
 
