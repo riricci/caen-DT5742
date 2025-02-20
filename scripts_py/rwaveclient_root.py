@@ -1,7 +1,12 @@
+# 2025.02.10 Riccardo Ricci
+# TO BE UPDATED after having the final version of the calibration_utils.py
+
 import sys
 import numpy as np
+sys.path.append("/eu/caen-dt5742b/python/")
 from rwave import rwaveclient
 import uproot
+import matplotlib.pyplot as plt
 
 HOST = 'localhost'
 PORT = 30001
@@ -9,59 +14,66 @@ PORT = 30001
 OUTPUT_FILE = "output.root"
 TREE_NAME = "waveform_tree"
 
+
 def acquire_data():
+    """Acquires waveform data from the digitizer."""
     with rwaveclient(HOST, PORT, verbose=True) as rwc:
         if rwc is None:
             return None
 
-        # Configura il digitizer
         rwc.send_cmd('sampling 750')
         rwc.send_cmd('grmask 0x1')
         rwc.send_cmd('chmask 0x0003')
-
-        # Avvia l'acquisizione
         rwc.send_cmd("start")
-
-        # Acquisisci i dati
-        rwc.send_cmd('swtrg 1024')  # Trigger software
+        rwc.send_cmd('swtrg 1024')
         rwc.send_cmd('readout')
         rwc.send_cmd('download')
         data = rwc.download()
-        
-        # Ferma l'acquisizione
         rwc.send_cmd('stop')
         
         return data
 
-def save_to_root(data, filename):
+def save_waveforms_to_root(data, filename):
+    """Saves processed waveform data into a ROOT file."""
     if data is None:
         print("No data received!")
         return
+    
+    # Dictionary to store data in the correct format for uproot
+    tree_data = {"waveform_ch0": [], "waveform_ch1": [], "trigger_tag": [], "first_cell": []}
 
-    events = []
-    ch0_data = []
-    ch1_data = []
+    for event in data:
+        tree_data["waveform_ch0"].append(event[0]["waveform"])
+        tree_data["waveform_ch1"].append(event[1]["waveform"])
+        tree_data["trigger_tag"].append(event[0]["trigger_tag"])  # Store the trigger value directly
+        tree_data["first_cell"].append(event[0]["first_cell"])  # Store the first cell value directly
 
-    # Processa i dati
-    for i, event in enumerate(data):
-        events.append(i)  # Numero evento
-        ch0_data.append(event.get(0, np.zeros(1024)))  # Se ch0 non esiste, usa zeri
-        ch1_data.append(event.get(1, np.zeros(1024)))  # Se ch1 non esiste, usa zeri
+    # Convert lists to NumPy arrays
+    tree_data = {key: np.array(value) for key, value in tree_data.items()}
 
-    # Converti in array numpy
-    events = np.array(events, dtype=np.int32)
-    ch0_data = np.array(ch0_data, dtype=np.float32)
-    ch1_data = np.array(ch1_data, dtype=np.float32)
-
-    # Scrive su file ROOT
+    # Write to ROOT file
     with uproot.recreate(filename) as file:
-        file[TREE_NAME] = {
-            "event": events,
-            "ch0_waveform": ch0_data,
-            "ch1_waveform": ch1_data
-        }
-    print(f"Dati salvati in {filename}")
+        file[TREE_NAME] = tree_data
+
+
+
+def plot_waveform(data):
+    """Plots waveform data for a given event."""
+    plt.figure(figsize=(10, 6))
+    
+    plt.plot(data[0][0]["waveform"], label=f"Channel 0", color='blue')
+    plt.plot(data[0][1]["waveform"], label=f"Channel 1", color='red')
+
+    
+    plt.xlabel('Sample')
+    plt.ylabel('Amplitude')
+    plt.title(f'Waveform for Event a caso')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 if __name__ == "__main__":
     data = acquire_data()
-    save_to_root(data, OUTPUT_FILE)
+    # plot_waveform(data)
+    save_waveforms_to_root(data, OUTPUT_FILE)
+    
