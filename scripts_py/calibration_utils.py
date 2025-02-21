@@ -227,7 +227,7 @@ def apply_calibration_to_data():
                 calibrated_waveform[aligned_index] = int((copy_waveform[aligned_index] + 0.5) * 4095)
 
             all_original_waveforms.append(waveform)
-            all_calibrated_waveforms.append(copy_waveform)
+            all_calibrated_waveforms.append(calibrated_waveform)
         # # Plot the waveforms for comparison (for the current event)
         
 
