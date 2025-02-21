@@ -85,7 +85,7 @@ def take_calibration_data():
     output_file = args.output_file
     plot_cell = args.plot_cell
     save_pdf = args.save_pdf
-    calibration_file = args.load_calibration
+    load_calibration = args.load_calibration
     plot_waveforms = args.plot_waveforms
     save_to_root = args.save_to_root
     save_calibration = args.save_calibration
@@ -114,6 +114,7 @@ def take_calibration_data():
                 calibration_data[cell_index]["voltages"].append(v)
                 calibration_data[cell_index]["amplitudes"].append(amplitude)
 
+    
     # Perform linear regression for each cell using the mean amplitude across events
     fit_results = {}
     for cell, data in calibration_data.items():
@@ -157,6 +158,97 @@ def take_calibration_data():
         np.savez("calibration_parameters.npz", **fit_results_str)
 
 
+# testing calibration
+def apply_calibration_to_data():
+    """Applies calibration parameters to waveform data and saves calibrated data to a ROOT file."""
+    # Argument parsing
+    parser = argparse.ArgumentParser(
+        description="Calibration data acquisition.",
+        usage="python calibration_script.py --vmin MIN --vmax MAX --step STEP --output_file filename.root --plot_cell CELL --save_pdf"
+    )
+    parser.add_argument("--vmin", type=float, default=-0.4, help="Minimum voltage for calibration (default: -0.4V).")
+    parser.add_argument("--vmax", type=float, default=0.4, help="Maximum voltage for calibration (default: 0.4V).")
+    parser.add_argument("--step", type=float, default=0.15, help="Step size for voltage increments (default: 0.15V).")
+    parser.add_argument("--sleep", type=float, default=0.1, help="Sleep time for voltage stabilization (default: 0.1s).")
+    parser.add_argument("--output_file", type=str, default="calibration_data.root", help="Output ROOT file.")
+    parser.add_argument("--plot_cell", type=int, default=0, help="Cell index to plot (default: 0).")
+    parser.add_argument("--save_pdf", action="store_true", help="Save plots of all cells to a PDF file.")
+    parser.add_argument("--load_calibration", type=str, default=None, help="Use calibration file.")
+    parser.add_argument("--plot_waveforms", action="store_true", help="Plot waveforms.")
+    parser.add_argument("--save_to_root", action="store_true", help="Save data to ROOT file.")
+    parser.add_argument("--save_calibration", action="store_true", help="Save calibration parameters to .npz file.")
+    
+    args = parser.parse_args()
+
+    # Define voltage range and other parameters
+    voltages = np.arange(args.vmin, args.vmax + args.step, args.step)
+    voltages = voltages[voltages <= 0.5]  # Limit to 0.5V
+    s = args.sleep
+    output_file = args.output_file
+    plot_cell = args.plot_cell
+    save_pdf = args.save_pdf
+    load_calibration = args.load_calibration
+    plot_waveforms = args.plot_waveforms
+    save_to_root = args.save_to_root
+    save_calibration = args.save_calibration
+    # Load calibration parameters
+    
+    calibration_data = np.load(load_calibration, allow_pickle=True)
+    calibration_data = {int(cell): calibration_data[cell].item() for cell in calibration_data}
+    
+    # Container for calibrated data to be saved in ROOT format
+    calibrated_data = {cell: {"voltages": [], "amplitudes": []} for cell in range(1024)}
+
+    configure_pulser_calib()
+
+    for v in voltages:
+        set_pulser_voltage(v, s)
+        data = acquire_data(0x0003)
+        selected_ch = 1
+        all_original_waveforms = []
+        all_calibrated_waveforms = []
+        all_uncalibrated_waveforms = []
+        # Iterate over events and extract waveform values with smart indexing
+        for event_index, event in enumerate(data):
+            first_cell = event[selected_ch]["first_cell"]
+            waveform = event[selected_ch]["waveform"]
+            calibrated_waveform = np.zeros(1024, dtype=float)
+            copy_waveform = np.zeros(1024, dtype=float)
+            
+
+            # Access waveform with calculated indices without using np.roll
+            for cell_index in range(1024):
+                aligned_index = (cell_index + first_cell) % 1024
+                slope = calibration_data[cell_index]["slope"]
+                intercept = calibration_data[cell_index]["intercept"]
+                copy_waveform[aligned_index] = (waveform[aligned_index] - intercept) / slope
+                
+                #back to adc counts considering 12-bits ADC for -0.5 to 0.5 V
+                calibrated_waveform[aligned_index] = int((copy_waveform[aligned_index] + 0.5) * 4095)
+
+            all_original_waveforms.append(waveform)
+            all_calibrated_waveforms.append(copy_waveform)
+        # # Plot the waveforms for comparison (for the current event)
+        
+
+        if plot_waveforms:
+            plt.figure(figsize=(10, 6))
+            # plt.plot(all_original_waveforms[0], label="Original Waveform", color="blue")
+            plt.plot(all_calibrated_waveforms[0], label="Calibrated Waveform", color="red", linestyle="--")
+            plt.title(f"Waveform Comparison at Voltage {v}V")
+            plt.xlabel("Cell Index")
+            plt.ylabel("Amplitude (Voltage)")
+            plt.legend()
+            plt.show()
+            
+            plt.figure(figsize=(10, 6))
+            plt.plot(all_original_waveforms[0], label="Original Waveform", color="blue")
+            # plt.plot(all_calibrated_waveforms[1], label="Calibrated Waveform", color="red", linestyle="--")
+            plt.title(f"Waveform Comparison at Voltage {v}V")     
+            plt.xlabel("Cell Index")
+            plt.ylabel("Amplitude (ADC)")
+            plt.legend()
+            plt.show()
 
     
 # plotting calibration curves for the selected cell for ch1
