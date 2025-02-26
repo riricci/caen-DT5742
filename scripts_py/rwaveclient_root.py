@@ -15,7 +15,7 @@ OUTPUT_FILE = "waveforms.root"
 TREE_NAME = "waveform_tree"
 
 
-def acquire_data():
+def acquire_data(chmask):
     """Acquires waveform data from the digitizer."""
     with rwaveclient(HOST, PORT, verbose=True) as rwc:
         if rwc is None:
@@ -23,7 +23,7 @@ def acquire_data():
 
         rwc.send_cmd('sampling 750')
         rwc.send_cmd('grmask 0x1')
-        rwc.send_cmd('chmask 0x0003')
+        rwc.send_cmd(f'chmask {chmask}')
         rwc.send_cmd("start")
         rwc.send_cmd('swtrg 1024')
         rwc.send_cmd('readout')
@@ -69,6 +69,7 @@ def handle_data(data, selected_ch=None):
     return all_events_data
 
 
+# save to root possibly everything
 def save_waveforms_to_root(data, output_file):
     """Saves waveform data into one ROOT file per channel, with separate events."""
     event_data = handle_data(data)
@@ -83,6 +84,7 @@ def save_waveforms_to_root(data, output_file):
             for i, event in enumerate(event_data):
                 if f'waveform_ch{ch}' in event:
                     file[f"{TREE_NAME}_event_{i}"] = event
+
 
 
 
@@ -103,7 +105,7 @@ def plot_waveform(data):
 
 
 if __name__ == "__main__":
-    data = acquire_data()
+    data = acquire_data(0x0003)
     # plot_waveform(data)
     save_waveforms_to_root(data, OUTPUT_FILE)
     # print(handle_data(data))
