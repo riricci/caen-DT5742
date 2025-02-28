@@ -24,6 +24,10 @@ class OscilloscopeApp(QWidget):
         self.current_frame = 0
         self.is_running = True
         self.correction_enabled = False
+        self.rcorrection_enabled = False
+        self.first_cell = 0 
+        self.slopes = np.zeros(1024) 
+        self.intercepts = np.zeros(1024) 
         self.initUI()
         self.init_plot()
         
@@ -45,7 +49,11 @@ class OscilloscopeApp(QWidget):
     def toggle_correction(self, state):
         self.correction_enabled = state == Qt.Checked
         threading.Thread(target=self.configure_digitizer, daemon=True).start()
-
+    
+    def toggle_rcorrection(self, state):
+        self.rcorrection_enabled = state == Qt.Checked
+        threading.Thread(target=self.update_plot_correction, daemon=True).start()
+        
     def initUI(self):
         layout = QVBoxLayout()
         self.setWindowTitle("Digitizer Control")
@@ -76,6 +84,10 @@ class OscilloscopeApp(QWidget):
         self.correction_checkbox = QCheckBox('Enable Correction', self)
         self.correction_checkbox.stateChanged.connect(self.toggle_correction)
         layout.addWidget(self.correction_checkbox)
+        
+        self.rcorrection_checkbox = QCheckBox('Enable RCorrection', self)
+        self.rcorrection_checkbox.stateChanged.connect(self.toggle_rcorrection)
+        layout.addWidget(self.rcorrection_checkbox)
         
         self.canvas = FigureCanvas(plt.figure(facecolor='black'))
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
@@ -129,6 +141,8 @@ class OscilloscopeApp(QWidget):
         self.ani = animation.FuncAnimation(self.canvas.figure, self.update_plot, interval=100, blit=False, repeat=True)
         self.ani.event_source.stop()
 
+    
+    
     def next_frame(self):
         if self.latest_data is not None:
             self.current_frame = (self.current_frame + 1) % len(self.latest_data)
@@ -147,6 +161,7 @@ class OscilloscopeApp(QWidget):
             self.ax.set_title(f'Frame {self.current_frame}', color='white')
             self.current_frame = (self.current_frame + 1) % len(self.latest_data)
             self.canvas.draw()
+            
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
