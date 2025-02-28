@@ -3,9 +3,11 @@ import numpy as np
 import threading
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from PyQt5.QtWidgets import QApplication, QHBoxLayout, QWidget, QVBoxLayout, QPushButton, QLabel, QFrame
+from PyQt5.QtWidgets import (QApplication, QVBoxLayout, QWidget, QPushButton, QLabel, QCheckBox)
+from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT  # Import della toolbar per Qt5
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
+sys.path.append("/eu/caen-dt5742b/python/")
 from rwave import rwaveclient
 
 host = 'localhost'
@@ -20,7 +22,8 @@ class OscilloscopeApp(QWidget):
         self.channel_visibility = {0: True, 1: True}
         self.latest_data = None
         self.current_frame = 0
-        self.is_running = True  # Flag to control the animation
+        self.is_running = True
+        self.correction_enabled = False
         self.initUI()
         self.init_plot()
         
@@ -34,10 +37,15 @@ class OscilloscopeApp(QWidget):
                 rwc.send_cmd(f'sampling {self.current_frequency}')
                 rwc.send_cmd('grmask 0x1')
                 rwc.send_cmd('chmask 0x0003')
+                rwc.send_cmd('correction on' if self.correction_enabled else 'correction off')
     
-    def toggle_channel(self, ch):
-        self.channel_visibility[ch] = not self.channel_visibility[ch]
+    def toggle_channel(self, ch, state):
+        self.channel_visibility[ch] = state == Qt.Checked
     
+    def toggle_correction(self, state):
+        self.correction_enabled = state == Qt.Checked
+        threading.Thread(target=self.configure_digitizer, daemon=True).start()
+
     def initUI(self):
         layout = QVBoxLayout()
         self.setWindowTitle("Digitizer Control")
@@ -48,33 +56,37 @@ class OscilloscopeApp(QWidget):
         self.button.clicked.connect(self.startAcquisition)
         layout.addWidget(self.button)
         
-        self.freq_buttons = []
         for freq in [750, 1000, 2500, 5000]:
             btn = QPushButton(f"{freq} MHz", self)
             btn.setStyleSheet("background-color: #008CBA; color: white; font-size: 14px; border-radius: 10px; padding: 10px;")
             btn.clicked.connect(lambda _, f=freq: self.set_frequency(f))
-            self.freq_buttons.append(btn)
             layout.addWidget(btn)
         
         self.status_label = QLabel("Status: Ready")
         layout.addWidget(self.status_label)
         
-        # Creazione della canvas di matplotlib
+        # Channel checkboxes
+        for ch in [0, 1]:
+            checkbox = QCheckBox(f'Channel {ch}', self)
+            checkbox.setChecked(self.channel_visibility[ch])
+            checkbox.stateChanged.connect(lambda state, ch=ch: self.toggle_channel(ch, state))
+            layout.addWidget(checkbox)
+
+        # Correction checkbox
+        self.correction_checkbox = QCheckBox('Enable Correction', self)
+        self.correction_checkbox.stateChanged.connect(self.toggle_correction)
+        layout.addWidget(self.correction_checkbox)
+        
         self.canvas = FigureCanvas(plt.figure(facecolor='black'))
-        
-        # Aggiungi la toolbar sopra il canvas
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
-        layout.addWidget(self.toolbar)  # Aggiungi la toolbar al layout
-        layout.addWidget(self.canvas)  # Aggiungi la canvas sotto la toolbar
+        layout.addWidget(self.toolbar)
+        layout.addWidget(self.canvas)
         
-        # Aggiungi i pulsanti "Next Frame" e "Stop Frame"
         self.next_frame_button = QPushButton('Next Frame', self)
-        self.next_frame_button.setStyleSheet("background-color: #f1c232; color: black; font-size: 14px; border-radius: 10px; padding: 10px;")
         self.next_frame_button.clicked.connect(self.next_frame)
         layout.addWidget(self.next_frame_button)
         
         self.stop_frame_button = QPushButton('Stop Frame', self)
-        self.stop_frame_button.setStyleSheet("background-color: #e04e56; color: white; font-size: 14px; border-radius: 10px; padding: 10px;")
         self.stop_frame_button.clicked.connect(self.stop_frame)
         layout.addWidget(self.stop_frame_button)
         
@@ -112,20 +124,17 @@ class OscilloscopeApp(QWidget):
         self.ax.set_title("Oscilloscope Data", color='white')
         self.ax.grid(color='gray')
         self.ax.legend()
-        self.ax.tick_params(axis='both', colors='white')  # Add this line to change the color of ticks
+        self.ax.tick_params(axis='both', colors='white')
         self.canvas.figure.tight_layout()
-        self.canvas.figure.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
         self.ani = animation.FuncAnimation(self.canvas.figure, self.update_plot, interval=100, blit=False, repeat=True)
         self.ani.event_source.stop()
 
     def next_frame(self):
-        """Go to the next frame manually."""
         if self.latest_data is not None:
             self.current_frame = (self.current_frame + 1) % len(self.latest_data)
-            self.update_plot(None)  # Update the plot manually
+            self.update_plot(None)
     
     def stop_frame(self):
-        """Stop the automatic frame update."""
         self.ani.event_source.stop()
         self.is_running = False
     
@@ -134,12 +143,11 @@ class OscilloscopeApp(QWidget):
             event = self.latest_data[self.current_frame]
             for ch in [0, 1]:
                 if self.channel_visibility[ch]:
-                    self.lines[ch].set_ydata(event[ch])
+                    self.lines[ch].set_ydata(event[ch]["waveform"])
             self.ax.set_title(f'Frame {self.current_frame}', color='white')
             self.current_frame = (self.current_frame + 1) % len(self.latest_data)
             self.canvas.draw()
 
-        
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = OscilloscopeApp()
