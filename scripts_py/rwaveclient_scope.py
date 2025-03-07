@@ -103,6 +103,7 @@ class OscilloscopeApp(QWidget):
         layout.addWidget(self.stop_frame_button)
         
         self.setLayout(layout)
+        self.canvas.mpl_connect("motion_notify_event", self.toggle_animation)
     
     def startAcquisition(self):
         self.button.setEnabled(False)
@@ -140,8 +141,12 @@ class OscilloscopeApp(QWidget):
         self.canvas.figure.tight_layout()
         self.ani = animation.FuncAnimation(self.canvas.figure, self.update_plot, interval=100, blit=False, repeat=True)
         self.ani.event_source.stop()
-
     
+    def toggle_animation(self, event):
+        if self.toolbar.mode:
+            self.ani.event_source.stop()
+        else:
+            self.ani.event_source.start()
     
     def next_frame(self):
         if self.latest_data is not None:
@@ -160,9 +165,8 @@ class OscilloscopeApp(QWidget):
                     self.lines[ch].set_ydata(event[ch]["waveform"])
             self.ax.set_title(f'Frame {self.current_frame}', color='white')
             self.current_frame = (self.current_frame + 1) % len(self.latest_data)
-            self.canvas.draw()
-            
-
+            self.canvas.flush_events()
+    
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = OscilloscopeApp()
