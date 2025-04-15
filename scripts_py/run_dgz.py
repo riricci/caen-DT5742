@@ -19,6 +19,8 @@ parser.add_argument("--min_events", type=int, default=1000,
                     help="Minimum number of valid waveforms to accumulate before saving.")
 parser.add_argument("--log_file", type=str, default="acquisition_log.txt", 
                     help="Log file to record acquisition details.")
+parser.add_argument("--sampling", type=float, default=5000,
+                    help="Sampling frequency in MHz (default: 5.0 MHz)")
 args = parser.parse_args()
 
 
@@ -29,8 +31,8 @@ HOST = 'localhost'
 PORT = 30001
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-OUTPUT_FILE = f"./data/{timestamp}_waveforms.root"
-NPZ_FILE = f"./data/{timestamp}_waveforms.npz"
+OUTPUT_FILE = f"./data/{timestamp}_waveforms_{args.sampling}.root"
+NPZ_FILE = f"./data/{timestamp}_waveforms_{args.sampling}.npz"
 TREE_NAME = "waveform_tree"
 
 
@@ -41,7 +43,7 @@ def acquire_data(chmask, correction):
         if rwc is None:
             return None
 
-        rwc.send_cmd('sampling 5000')
+        rwc.send_cmd(f'sampling {int(args.sampling)}')
         rwc.send_cmd('grmask 0x1')
         rwc.send_cmd(f'chmask {chmask}')
         rwc.send_cmd('correction on' if correction else 'correction off')
