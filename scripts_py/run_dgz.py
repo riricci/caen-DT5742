@@ -21,7 +21,13 @@ parser.add_argument("--log_file", type=str, default="acquisition_log.txt",
                     help="Log file to record acquisition details.")
 parser.add_argument("--sampling", type=float, default=5000,
                     help="Sampling frequency in MHz (default: 5.0 MHz)")
+parser.add_argument("--vbias", type=float, required=True,
+    help="Bias voltage applied to the SiPM (in volts, e.g., 35)")
 args = parser.parse_args()
+
+# safety check for bias voltage
+if not (10.0 <= args.vbias <= 80.0):
+    print(f"⚠️ Warning: Vbias {args.vbias} V seems out of expected range (10–80 V).")
 
 
 # Create data directory if it doesn't exist
@@ -31,8 +37,8 @@ HOST = 'localhost'
 PORT = 30001
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-OUTPUT_FILE = f"./data/{timestamp}_waveforms_{args.sampling}.root"
-NPZ_FILE = f"./data/{timestamp}_waveforms_{args.sampling}.npz"
+OUTPUT_FILE = f"./data/{timestamp}_waveforms_bias{args.vbias}_{int((args.sampling)/1000)}GS.root"
+NPZ_FILE = f"./data/{timestamp}_waveforms_bias{args.vbias}_{int(args.sampling)/1000}GS.npz"
 TREE_NAME = "waveform_tree"
 
 
